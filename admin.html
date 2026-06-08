@@ -103,62 +103,62 @@
     </div>
 
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getAuth, createUserWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-        import { getFirestore, doc, setDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { getAuth, createUserWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+    import { getFirestore, doc, setDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-        // Configuration Firebase (Mettez la même configuration ici)
-        const firebaseConfig = {
-            apiKey: "AIzaSyAeQmIo2EEQNSvuBt54obS-qrRxn35WaT8",
-            authDomain: "operating-system-ea358.firebaseapp.com",
-            projectId: "operating-system-ea358",
-            storageBucket: "operating-system-ea358.firebasestorage.app",
-            messagingSenderId: "896027329219",
-            appId: "1:896027329219:web:59d7ef893c8ee61c10d876",
-            measurementId: "G-8KRMJJF1C8"
-        };
+    // Configuration Firebase
+    const firebaseConfig = {
+        apiKey: "AIzaSyAeQmIo2EEQNSvuBt54obS-qrRxn35WaT8",
+        authDomain: "operating-system-ea358.firebaseapp.com",
+        projectId: "operating-system-ea358",
+        storageBucket: "operating-system-ea358.firebasestorage.app",
+        messagingSenderId: "896027329219",
+        appId: "1:896027329219:web:59d7ef893c8ee61c10d876",
+        measurementId: "G-8KRMJJF1C8"
+    };
 
-        // Initialisation de l'application principale et de la base de données
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
+    // Instance principale (si vous y connectez un compte admin plus tard)
+    const app = initializeApp(firebaseConfig);
 
-        // Initialisation d'une instance secondaire isolée pour créer l'utilisateur sans déconnecter l'admin
-        const secondaryApp = initializeApp(firebaseConfig, "Secondary");
-        const authSecondary = getAuth(secondaryApp);
+    // Instance secondaire isolée pour créer l'utilisateur
+    const secondaryApp = initializeApp(firebaseConfig, "Secondary");
+    const authSecondary = getAuth(secondaryApp);
+    const dbSecondary = getFirestore(secondaryApp); // 💡 Lié à l'instance secondaire
 
-        document.getElementById('adminForm').addEventListener('submit', async function(event) {
-            event.preventDefault();
-            
-            const lastName = document.getElementById('lastName').value;
-            const firstName = document.getElementById('firstName').value;
-            const email = document.getElementById('adminEmail').value;
-            const tempPassword = document.getElementById('tempPassword').value;
+    document.getElementById('adminForm').addEventListener('submit', async function(event) {
+        event.preventDefault();
+        
+        const lastName = document.getElementById('lastName').value;
+        const firstName = document.getElementById('firstName').value;
+        const email = document.getElementById('adminEmail').value;
+        const tempPassword = document.getElementById('tempPassword').value;
 
-            try {
-                // 1. Création du compte dans Firebase Authentication via l'instance secondaire
-                const userCredential = await createUserWithEmailAndPassword(authSecondary, email, tempPassword);
-                const newUser = userCredential.user;
+        try {
+            // 1. Création du compte dans Firebase Authentication
+            const userCredential = await createUserWithEmailAndPassword(authSecondary, email, tempPassword);
+            const newUser = userCredential.user;
 
-                // 2. Sauvegarde des données dans la section "users" de Firestore
-                await setDoc(doc(db, "users", newUser.uid), {
-                    lastName: lastName,
-                    firstName: firstName,
-                    email: email,
-                    role: "employee",
-                    createdAt: new Date().toISOString()
-                });
+            // 2. Sauvegarde dans Firestore via dbSecondary (pour l'authentification soit reconnue)
+            await setDoc(doc(dbSecondary, "users", newUser.uid), {
+                lastName: lastName,
+                firstName: firstName,
+                email: email,
+                role: "employee",
+                createdAt: new Date().toISOString()
+            });
 
-                // 3. Déconnexion immédiate de l'instance secondaire pour nettoyer le cache local
-                await signOut(authSecondary);
+            // 3. Déconnexion de l'instance secondaire
+            await signOut(authSecondary);
 
-                alert(`L'employé ${firstName} ${lastName} a été créé avec succès !`);
-                document.getElementById('adminForm').reset();
+            alert(`L'employé ${firstName} ${lastName} a été créé avec succès !`);
+            document.getElementById('adminForm').reset();
 
-            } catch (error) {
-                console.error("Erreur lors de la création :", error);
-                alert("Erreur : " + error.message);
-            }
-        });
+        } catch (error) {
+            console.error("Erreur lors de la création :", error);
+            alert("Erreur : " + error.message);
+        }
+    });
 </script>
 </body>
 </html>
