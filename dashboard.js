@@ -26,6 +26,7 @@ import {
   where,
   getDocs,
   limit,
+  orderBy,
   serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 import {
@@ -58,6 +59,7 @@ let currentRole = 'employee'; // 'admin' | 'employee'
 // Sections de l'app et leurs permissions
 const SECTIONS = [
   { key: 'dashboard',   label: 'Dashboard',   icon: 'fa-chart-pie' },
+  { key: 'finances',    label: 'Finances',     icon: 'fa-coins' },
   { key: 'clients',     label: 'Clients',      icon: 'fa-users' },
   { key: 'projets',     label: 'Projets',      icon: 'fa-folder-open' },
   { key: 'messagerie',  label: 'Messagerie',   icon: 'fa-comment-dots' },
@@ -159,24 +161,44 @@ async function loadInitialData(uid) {
 
 function injectAdminNavItem() {
   const nav = document.getElementById('main-nav');
-  if (!nav || nav.querySelector('[data-target="utilisateurs"]')) return;
+  if (!nav) return;
+
+  // Ajouter Finances dans la section Principal (avant la section Outils)
+  if (!nav.querySelector('[data-target="finances"]')) {
+    const toolsLabel = Array.from(nav.querySelectorAll('.nav-section-label')).find(el => el.textContent === 'Outils');
+    const financesItem = document.createElement('a');
+    financesItem.href = '#';
+    financesItem.className = 'menu-item admin-only';
+    financesItem.dataset.target = 'finances';
+    financesItem.innerHTML = `
+      <i class="fa-solid fa-coins"></i>
+      <span class="nav-label">Finances</span>
+    `;
+    if (toolsLabel) {
+      nav.insertBefore(financesItem, toolsLabel);
+    } else {
+      nav.appendChild(financesItem);
+    }
+  }
 
   // Ajouter un séparateur "Administration" s'il n'existe pas
-  const adminSection = document.createElement('span');
-  adminSection.className = 'nav-section-label';
-  adminSection.textContent = 'Administration';
+  if (!nav.querySelector('[data-target="utilisateurs"]')) {
+    const adminSection = document.createElement('span');
+    adminSection.className = 'nav-section-label';
+    adminSection.textContent = 'Administration';
 
-  const adminItem = document.createElement('a');
-  adminItem.href = '#';
-  adminItem.className = 'menu-item admin-only';
-  adminItem.dataset.target = 'utilisateurs';
-  adminItem.innerHTML = `
-    <i class="fa-solid fa-shield-halved"></i>
-    <span class="nav-label">Utilisateurs</span>
-  `;
+    const adminItem = document.createElement('a');
+    adminItem.href = '#';
+    adminItem.className = 'menu-item admin-only';
+    adminItem.dataset.target = 'utilisateurs';
+    adminItem.innerHTML = `
+      <i class="fa-solid fa-shield-halved"></i>
+      <span class="nav-label">Utilisateurs</span>
+    `;
 
-  nav.appendChild(adminSection);
-  nav.appendChild(adminItem);
+    nav.appendChild(adminSection);
+    nav.appendChild(adminItem);
+  }
 }
 
 
@@ -275,6 +297,17 @@ async function renderPageContent(pageName) {
         scheduleMidnightRefresh();
         initGlobalSearch();
       });
+      break;
+
+    case 'finances':
+      if (currentRole !== 'admin') {
+        showToast('Accès réservé aux administrateurs', 'error');
+        renderPageContent('dashboard');
+        return;
+      }
+      main.innerHTML = getFinancesHTML();
+      await loadFinancesData();
+      initFinances();
       break;
 
     case 'projets':
@@ -2826,6 +2859,61 @@ export function renderSuggestions(results, container) {
 
 
 /* ═══════════════════════════════════════════════════════════
+   SECTION FINANCES — Pilotage financier
+═══════════════════════════════════════════════════════════ */
+
+const financesState = {
+  metrics: { caMois: 0, caTrimestre: 0, caAnnee: 0, margeBrute: 0, margeNette: 0, resultatExploitation: 0, budgetTotal: 0, depensesEngagees: 0, tresorerie: 0, delaiPaiementMoyen: 0 },
+  invoices: [],
+  expenses: [],
+  budget: { categories: {} },
+  currentTab: 'overview'
+};
+
+async function loadFinancesData(forceRefresh = false) {
+  if (!currentUid) return;
+  if (!forceRefresh && dataCache.finances && dataCache.lastFetch.finances && (Date.now() - dataCache.lastFetch.finances) < CACHE_DURATION) {
+    Object.assign(financesState, dataCache.finances);
+    renderFinancesContent();
+    return;
+  }
+  try {
+    const now = new Date(), year = now.getFullYear(), month = now.getMonth() + 1, quarter = Math.ceil(month / 3);
+    const metricsSnap = await getDoc(doc(db, 'finances', 'metrics', String(year), 'summary'));
+    if (metricsSnap.exists()) {
+      const d = metricsSnap.data();
+      financesState.metrics = {
+        caMois: d.monthly?.[month-1]?.revenue || 0, caTrimestre: d.quarterly?.[quarter-1]?.revenue || 0, caAnnee: d.annual?.revenue || 0,
+        margeBrute: d.monthly?.[month-1]?.grossMargin || 0, margeNette: d.monthly?.[month-1]?.netMargin || 0,
+        resultatExploitation: d.monthly?.[month-1]?.operatingResult || 0, budgetTotal: d.annual?.budget || 0,
+        depensesEngagees: d.annual?.spent || 0, tresorerie: d.current?.cashFlow || 0, delaiPaiementMoyen: d.current?.avgPaymentDelay || 0
+      };
+    }
+    const invSnap = await getDocs(query(collection(db, 'invoices'), where('year', '==', year), orderBy('date', 'desc'), limit(50)));
+    financesState.invoices = invSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const expSnap = await getDocs(query(collection(db, 'expenses'), where('year', '==', year), orderBy('date', 'desc'), limit(50)));
+    financesState.expenses = expSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const budSnap = await getDoc(doc(db, 'finances', 'budget', String(year), 'details'));
+    if (budSnap.exists()) financesState.budget = budSnap.data();
+    dataCache.finances = { ...financesState };
+    dataCache.lastFetch.finances = Date.now();
+    renderFinancesContent();
+  } catch (err) { console.warn('loadFinancesData:', err); showToast('Erreur chargement finances', 'error'); }
+}
+
+function renderFinancesContent() {
+  const tabContent = document.getElementById('finances-tab-content');
+  if (!tabContent) return;
+  const activeTab = document.querySelector('.finances-tab.active')?.dataset.tab || 'overview';
+  switch (activeTab) {
+    case 'overview': tabContent.innerHTML = getFinancesOverviewHTML(); break;
+    case 'invoices': tabContent.innerHTML = getFinancesInvoicesHTML(); initInvoicesEvents(); break;
+    case 'budget': tabContent.innerHTML = getFinancesBudgetHTML(); initBudgetEvents(); break;
+    case 'reports': tabContent.innerHTML = getFinancesReportsHTML(); break;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
    SECTION PROJETS — Données & Fonctionnalités
 ═══════════════════════════════════════════════════════════ */
 
@@ -4405,6 +4493,534 @@ function openUserModal(userId) {
   });
 }
 
+
+/* ═══════════════════════════════════════════════════════════
+   SECTION FINANCES — Fonctions HTML et événements
+═══════════════════════════════════════════════════════════ */
+
+function getFinancesHTML() {
+  return `
+    <div class="page-header">
+      <div class="header-left">
+        <h1 class="page-title"><i class="fa-solid fa-coins"></i> Finances</h1>
+        <span class="page-subtitle">Pilotage financier et trésorerie</span>
+      </div>
+      <div class="header-actions">
+        <select id="finances-period" class="filter-select">
+          <option value="month">Mois en cours</option>
+          <option value="quarter">Trimestre</option>
+          <option value="year">Année</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="finances-tabs">
+      <button class="finances-tab active" data-tab="overview"><i class="fa-solid fa-chart-pie"></i> Vue d'ensemble</button>
+      <button class="finances-tab" data-tab="invoices"><i class="fa-solid fa-file-invoice-dollar"></i> Facturation</button>
+      <button class="finances-tab" data-tab="budget"><i class="fa-solid fa-bullseye"></i> Budget</button>
+      <button class="finances-tab" data-tab="reports"><i class="fa-solid fa-file-contract"></i> Rapports</button>
+    </div>
+
+    <div id="finances-tab-content" class="finances-tab-content">
+      <!-- Content injected here -->
+    </div>
+  `;
+}
+
+function getFinancesOverviewHTML() {
+  const m = financesState.metrics;
+  const budgetUsed = m.budgetTotal > 0 ? (m.depensesEngagees / m.budgetTotal * 100).toFixed(1) : 0;
+  const budgetRemaining = m.budgetTotal - m.depensesEngagees;
+
+  const alerts = [];
+  if (budgetUsed > 90) alerts.push({ type: 'danger', message: `Budget à ${budgetUsed}% épuisé` });
+  if (m.margeNette < 10) alerts.push({ type: 'warning', message: 'Marge nette faible' });
+  if (m.delaiPaiementMoyen > 45) alerts.push({ type: 'warning', message: 'Délai de paiement élevé' });
+
+  return `
+    <div class="finances-overview">
+      <div class="finances-kpi-grid">
+        <div class="kpi-card ca">
+          <div class="kpi-icon"><i class="fa-solid fa-euro-sign"></i></div>
+          <div class="kpi-content">
+            <span class="kpi-label">CA du mois</span>
+            <span class="kpi-value">${formatCurrency(m.caMois)}</span>
+            <span class="kpi-sub">Trimestre: ${formatCurrency(m.caTrimestre)}</span>
+          </div>
+        </div>
+        <div class="kpi-card margin">
+          <div class="kpi-icon"><i class="fa-solid fa-percent"></i></div>
+          <div class="kpi-content">
+            <span class="kpi-label">Marge nette</span>
+            <span class="kpi-value">${m.margeNette.toFixed(1)}%</span>
+            <span class="kpi-sub">Brute: ${m.margeBrute.toFixed(1)}%</span>
+          </div>
+        </div>
+        <div class="kpi-card result">
+          <div class="kpi-icon"><i class="fa-solid fa-chart-line"></i></div>
+          <div class="kpi-content">
+            <span class="kpi-label">Résultat d'exploitation</span>
+            <span class="kpi-value ${m.resultatExploitation >= 0 ? 'positive' : 'negative'}">${formatCurrency(m.resultatExploitation)}</span>
+          </div>
+        </div>
+        <div class="kpi-card treasury">
+          <div class="kpi-icon"><i class="fa-solid fa-wallet"></i></div>
+          <div class="kpi-content">
+            <span class="kpi-label">Trésorerie</span>
+            <span class="kpi-value ${m.tresorerie >= 0 ? 'positive' : 'negative'}">${formatCurrency(m.tresorerie)}</span>
+            <span class="kpi-sub">Délai paiement: ${m.delaiPaiementMoyen.toFixed(0)}j</span>
+          </div>
+        </div>
+      </div>
+
+      ${alerts.length > 0 ? `
+        <div class="finances-alerts">
+          ${alerts.map(a => `
+            <div class="alert alert-${a.type}">
+              <i class="fa-solid ${a.type === 'danger' ? 'fa-triangle-exclamation' : 'fa-circle-exclamation'}"></i>
+              <span>${a.message}</span>
+            </div>
+          `).join('')}
+        </div>
+      ` : ''}
+
+      <div class="finances-budget-card">
+        <div class="budget-header">
+          <h3><i class="fa-solid fa-bullseye"></i> Budget annuel</h3>
+          <span class="budget-period">${new Date().getFullYear()}</span>
+        </div>
+        <div class="budget-progress">
+          <div class="budget-bar">
+            <div class="budget-fill ${budgetUsed > 90 ? 'danger' : budgetUsed > 75 ? 'warning' : ''}" style="width: ${Math.min(budgetUsed, 100)}%"></div>
+          </div>
+          <div class="budget-stats">
+            <span class="budget-used">Utilisé: <strong>${formatCurrency(m.depensesEngagees)}</strong> (${budgetUsed}%)</span>
+            <span class="budget-remaining ${budgetRemaining < 0 ? 'negative' : ''}">Restant: <strong>${formatCurrency(budgetRemaining)}</strong></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="finances-charts-grid">
+        <div class="chart-card">
+          <div class="chart-header">
+            <h4>Évolution du CA</h4>
+          </div>
+          <div class="chart-container" id="revenue-chart-container">
+            ${renderFallbackRevenueChart()}
+          </div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-header">
+            <h4>Répartition des dépenses</h4>
+          </div>
+          <div class="chart-container" id="expenses-chart-container">
+            ${renderFallbackExpensesChart()}
+          </div>
+        </div>
+      </div>
+
+      <div class="finances-activity">
+        <h4><i class="fa-solid fa-clock-rotate-left"></i> Factures récentes</h4>
+        <div class="activity-list">
+          ${financesState.invoices.slice(0, 5).map(inv => `
+            <div class="activity-item ${inv.status}">
+              <div class="activity-icon">
+                <i class="fa-solid ${inv.status === 'paid' ? 'fa-check-circle' : inv.status === 'pending' ? 'fa-clock' : 'fa-file-invoice'}"></i>
+              </div>
+              <div class="activity-details">
+                <span class="activity-title">${escapeHtml(inv.clientName || 'Client')}</span>
+                <span class="activity-meta">${formatCurrency(inv.amount)} • ${formatDate(inv.date)}</span>
+              </div>
+              <span class="activity-status status-${inv.status}">${getInvoiceStatusLabel(inv.status)}</span>
+            </div>
+          `).join('') || '<p class="no-activity">Aucune facture récente</p>'}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderFallbackRevenueChart() {
+  const data = financesState.chartData?.monthly || [];
+  const months = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sept', 'Oct', 'Nov', 'Déc'];
+  const max = Math.max(...data.map(d => d?.revenue || 0), 1);
+
+  if (data.length === 0) {
+    return '<p class="no-data">Aucune donnée disponible</p>';
+  }
+
+  return `
+    <div class="fallback-chart">
+      ${data.map((d, i) => `
+        <div class="chart-bar-wrapper">
+          <div class="chart-bar" style="height: ${((d?.revenue || 0) / max * 80 + 5)}%">
+            <span class="chart-tooltip">${formatCurrency(d?.revenue || 0)}</span>
+          </div>
+          <span class="chart-label">${months[i] || ''}</span>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+function renderFallbackExpensesChart() {
+  const categories = financesState.budget.categories || {};
+  const entries = Object.entries(categories);
+  if (entries.length === 0) return '<p class="no-data">Aucune donnée</p>';
+
+  const colors = ['#4f46e5', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
+  const total = entries.reduce((sum, [, cat]) => sum + (cat.spent || 0), 0);
+
+  return `
+    <div class="fallback-doughnut">
+      <div class="doughnut-legend">
+        ${entries.map(([key, cat], i) => `
+          <div class="legend-item">
+            <span class="legend-color" style="background: ${colors[i % colors.length]}"></span>
+            <span class="legend-label">${escapeHtml(cat.name || key)}</span>
+            <span class="legend-value">${formatCurrency(cat.spent || 0)} (${total > 0 ? ((cat.spent || 0) / total * 100).toFixed(0) : 0}%)</span>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function getFinancesInvoicesHTML() {
+  const filtered = getFilteredInvoices();
+  const totalAmount = filtered.reduce((sum, inv) => sum + (inv.amount || 0), 0);
+  const paidAmount = filtered.filter(i => i.status === 'paid').reduce((sum, inv) => sum + (inv.amount || 0), 0);
+  const pendingAmount = filtered.filter(i => i.status === 'pending').reduce((sum, inv) => sum + (inv.amount || 0), 0);
+
+  return `
+    <div class="finances-invoices">
+      <div class="invoices-stats">
+        <div class="stat-card">
+          <span class="stat-value">${formatCurrency(totalAmount)}</span>
+          <span class="stat-label">Total facturé</span>
+        </div>
+        <div class="stat-card success">
+          <span class="stat-value">${formatCurrency(paidAmount)}</span>
+          <span class="stat-label">Encaissé</span>
+        </div>
+        <div class="stat-card warning">
+          <span class="stat-value">${formatCurrency(pendingAmount)}</span>
+          <span class="stat-label">En attente</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-value">${filtered.filter(i => i.status === 'pending').length}</span>
+          <span class="stat-label">Factures en attente</span>
+        </div>
+      </div>
+
+      <div class="invoices-filters">
+        <div class="filter-group">
+          <input type="text" id="invoice-search" placeholder="Rechercher un client..." class="filter-input">
+          <select id="invoice-status-filter" class="filter-select">
+            <option value="all">Tous les statuts</option>
+            <option value="paid">Payée</option>
+            <option value="pending">En attente</option>
+            <option value="draft">Brouillon</option>
+            <option value="overdue">En retard</option>
+          </select>
+        </div>
+        <button class="btn-primary-sm" id="btn-new-invoice">
+          <i class="fa-solid fa-plus"></i> Nouvelle facture
+        </button>
+      </div>
+
+      <div class="invoices-table-container">
+        <table class="invoices-table">
+          <thead>
+            <tr>
+              <th>N° Facture</th>
+              <th>Client</th>
+              <th>Date</th>
+              <th>Échéance</th>
+              <th>Montant</th>
+              <th>Statut</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${filtered.map(inv => `
+              <tr data-id="${inv.id}">
+                <td><span class="invoice-num">${inv.number || '-'}</span></td>
+                <td>${escapeHtml(inv.clientName || '-')}</td>
+                <td>${formatDate(inv.date)}</td>
+                <td>${formatDate(inv.dueDate)}</td>
+                <td class="amount">${formatCurrency(inv.amount)}</td>
+                <td><span class="invoice-status-badge ${inv.status}">${getInvoiceStatusLabel(inv.status)}</span></td>
+                <td>
+                  <button class="btn-icon" title="Voir" onclick="viewInvoice('${inv.id}')"><i class="fa-solid fa-eye"></i></button>
+                  <button class="btn-icon" title="Télécharger PDF" onclick="downloadInvoice('${inv.id}')"><i class="fa-solid fa-download"></i></button>
+                  ${inv.status !== 'paid' ? `<button class="btn-icon" title="Marquer payée" onclick="markInvoicePaid('${inv.id}')"><i class="fa-solid fa-check"></i></button>` : ''}
+                </td>
+              </tr>
+            `).join('') || '<tr><td colspan="7" class="no-data">Aucune facture</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+function getFinancesBudgetHTML() {
+  const b = financesState.budget;
+  const categories = b.categories || {};
+  const totalBudget = Object.values(categories).reduce((sum, cat) => sum + (cat.budget || 0), 0);
+  const totalSpent = Object.values(categories).reduce((sum, cat) => sum + (cat.spent || 0), 0);
+
+  return `
+    <div class="finances-budget">
+      <div class="budget-overview-card">
+        <div class="budget-overview-header">
+          <h3>Budget ${new Date().getFullYear()}</h3>
+          <button class="btn-secondary-sm" id="btn-edit-budget"><i class="fa-solid fa-pen"></i> Modifier</button>
+        </div>
+        <div class="budget-overview-stats">
+          <div class="budget-stat">
+            <span class="stat-label">Budget total</span>
+            <span class="stat-value">${formatCurrency(totalBudget)}</span>
+          </div>
+          <div class="budget-stat">
+            <span class="stat-label">Dépensé</span>
+            <span class="stat-value ${totalSpent > totalBudget ? 'negative' : ''}">${formatCurrency(totalSpent)}</span>
+          </div>
+          <div class="budget-stat">
+            <span class="stat-label">Restant</span>
+            <span class="stat-value ${totalBudget - totalSpent < 0 ? 'negative' : 'positive'}">${formatCurrency(totalBudget - totalSpent)}</span>
+          </div>
+          <div class="budget-stat">
+            <span class="stat-label">Utilisation</span>
+            <span class="stat-value">${totalBudget > 0 ? ((totalSpent / totalBudget) * 100).toFixed(1) : 0}%</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="budget-categories">
+        <h4>Répartition par catégorie</h4>
+        <div class="budget-categories-grid">
+          ${Object.entries(categories).map(([key, cat]) => {
+            const percent = cat.budget > 0 ? ((cat.spent || 0) / cat.budget * 100) : 0;
+            const isOver = percent > 100;
+            return `
+              <div class="budget-category-card ${isOver ? 'over' : percent > 80 ? 'warning' : ''}">
+                <div class="category-header">
+                  <span class="category-name">${escapeHtml(cat.name || key)}</span>
+                  <span class="category-percent">${percent.toFixed(0)}%</span>
+                </div>
+                <div class="category-bar">
+                  <div class="category-fill ${isOver ? 'over' : percent > 80 ? 'warning' : ''}" style="width: ${Math.min(percent, 100)}%"></div>
+                </div>
+                <div class="category-stats">
+                  <span class="spent">${formatCurrency(cat.spent || 0)} / ${formatCurrency(cat.budget || 0)}</span>
+                  <span class="remaining ${cat.budget - (cat.spent || 0) < 0 ? 'negative' : ''}">${formatCurrency((cat.budget || 0) - (cat.spent || 0))}</span>
+                </div>
+                ${isOver ? `<div class="category-alert"><i class="fa-solid fa-triangle-exclamation"></i> Dépassement de budget</div>` : ''}
+              </div>
+            `;
+          }).join('') || '<p class="no-data">Aucune catégorie définie</p>'}
+        </div>
+      </div>
+
+      <div class="budget-expenses">
+        <h4>Dernières dépenses</h4>
+        <div class="expenses-list">
+          ${financesState.expenses.slice(0, 10).map(exp => `
+            <div class="expense-item">
+              <div class="expense-info">
+                <span class="expense-title">${escapeHtml(exp.description || 'Dépense')}</span>
+                <span class="expense-category">${escapeHtml(exp.category || '-')}</span>
+              </div>
+              <div class="expense-meta">
+                <span class="expense-amount">${formatCurrency(exp.amount)}</span>
+                <span class="expense-date">${formatDate(exp.date)}</span>
+              </div>
+            </div>
+          `).join('') || '<p class="no-data">Aucune dépense enregistrée</p>'}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function getFinancesReportsHTML() {
+  return `
+    <div class="finances-reports">
+      <div class="reports-grid">
+        <div class="report-card">
+          <div class="report-icon"><i class="fa-solid fa-file-pdf"></i></div>
+          <div class="report-info">
+            <h4>Rapport mensuel</h4>
+            <p>CA, marges, résultat d'exploitation</p>
+            <span class="report-period">${new Date().toLocaleString('fr-FR', { month: 'long', year: 'numeric' })}</span>
+          </div>
+          <button class="btn-primary-sm" onclick="generateReport('monthly')">
+            <i class="fa-solid fa-download"></i> PDF
+          </button>
+        </div>
+
+        <div class="report-card">
+          <div class="report-icon"><i class="fa-solid fa-file-invoice-dollar"></i></div>
+          <div class="report-info">
+            <h4>Rapport trimestriel</h4>
+            <p>Analyse détaillée du trimestre en cours</p>
+            <span class="report-period">T${Math.ceil((new Date().getMonth() + 1) / 3)} ${new Date().getFullYear()}</span>
+          </div>
+          <button class="btn-primary-sm" onclick="generateReport('quarterly')">
+            <i class="fa-solid fa-download"></i> PDF
+          </button>
+        </div>
+
+        <div class="report-card">
+          <div class="report-icon"><i class="fa-solid fa-chart-column"></i></div>
+          <div class="report-info">
+            <h4>Rapport annuel</h4>
+            <p>Bilan complet de l'exercice</p>
+            <span class="report-period">${new Date().getFullYear()}</span>
+          </div>
+          <button class="btn-primary-sm" onclick="generateReport('annual')">
+            <i class="fa-solid fa-download"></i> PDF
+          </button>
+        </div>
+
+        <div class="report-card">
+          <div class="report-icon"><i class="fa-solid fa-file-csv"></i></div>
+          <div class="report-info">
+            <h4>Export comptable</h4>
+            <p>Écritures et balance</p>
+            <span class="report-period">CSV / Excel</span>
+          </div>
+          <button class="btn-primary-sm" onclick="exportAccounting()">
+            <i class="fa-solid fa-download"></i> Exporter
+          </button>
+        </div>
+      </div>
+
+      <div class="reports-comparison">
+        <h4><i class="fa-solid fa-scale-balanced"></i> Comparaison périodes</h4>
+        <div class="comparison-controls">
+          <select id="compare-period-1" class="filter-select">
+            <option value="current-month">Mois en cours</option>
+            <option value="last-month">Mois dernier</option>
+            <option value="current-quarter">Trimestre en cours</option>
+            <option value="last-quarter">Trimestre dernier</option>
+          </select>
+          <span>vs</span>
+          <select id="compare-period-2" class="filter-select">
+            <option value="last-month" selected>Mois dernier</option>
+            <option value="current-month">Mois en cours</option>
+            <option value="last-quarter">Trimestre dernier</option>
+            <option value="current-quarter">Trimestre en cours</option>
+          </select>
+          <button class="btn-secondary-sm" onclick="comparePeriods()">Comparer</button>
+        </div>
+        <div id="comparison-results" class="comparison-results"></div>
+      </div>
+    </div>
+  `;
+}
+
+function initFinances() {
+  document.querySelectorAll('.finances-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.finances-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      renderFinancesContent();
+    });
+  });
+
+  document.getElementById('finances-period')?.addEventListener('change', (e) => {
+    financesState.currentPeriod = e.target.value;
+    loadFinancesData(true);
+  });
+
+  renderFinancesContent();
+}
+
+function initInvoicesEvents() {
+  document.getElementById('invoice-search')?.addEventListener('input', debounce(() => {
+    renderFinancesContent();
+  }, 300));
+
+  document.getElementById('invoice-status-filter')?.addEventListener('change', () => {
+    renderFinancesContent();
+  });
+
+  document.getElementById('btn-new-invoice')?.addEventListener('click', () => {
+    showToast('Création de facture - fonctionnalité à venir', 'info');
+  });
+}
+
+function initBudgetEvents() {
+  document.getElementById('btn-edit-budget')?.addEventListener('click', () => {
+    showToast('Édition du budget - fonctionnalité à venir', 'info');
+  });
+}
+
+function initReportsEvents() {
+  // Handled by inline onclick
+}
+
+function getFilteredInvoices() {
+  let filtered = [...financesState.invoices];
+  const search = document.getElementById('invoice-search')?.value?.toLowerCase() || '';
+  const status = document.getElementById('invoice-status-filter')?.value || 'all';
+
+  if (search) {
+    filtered = filtered.filter(inv =>
+      (inv.clientName || '').toLowerCase().includes(search) ||
+      (inv.number || '').toLowerCase().includes(search)
+    );
+  }
+
+  if (status !== 'all') {
+    filtered = filtered.filter(inv => inv.status === status);
+  }
+
+  return filtered;
+}
+
+function getInvoiceStatusLabel(status) {
+  const labels = { paid: 'Payée', pending: 'En attente', draft: 'Brouillon', overdue: 'En retard' };
+  return labels[status] || status;
+}
+
+function formatCurrency(amount) {
+  return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(amount || 0);
+}
+
+async function viewInvoice(id) {
+  showToast('Visualisation de la facture - fonctionnalité à venir', 'info');
+}
+
+async function downloadInvoice(id) {
+  showToast('Téléchargement PDF - fonctionnalité à venir', 'info');
+}
+
+async function markInvoicePaid(id) {
+  try {
+    await updateDoc(doc(db, 'invoices', id), { status: 'paid', paidDate: new Date().toISOString() });
+    invalidateCache('finances');
+    await loadFinancesData(true);
+    showToast('Facture marquée comme payée', 'success');
+  } catch (err) {
+    showToast('Erreur lors de la mise à jour', 'error');
+  }
+}
+
+async function generateReport(type) {
+  showToast(`Génération du rapport ${type} - fonctionnalité à venir`, 'info');
+}
+
+async function exportAccounting() {
+  showToast('Export comptable - fonctionnalité à venir', 'info');
+}
+
+async function comparePeriods() {
+  showToast('Comparaison des périodes - fonctionnalité à venir', 'info');
+}
 
 /* ═══════════════════════════════════════════════════════════
    UTILITAIRE
