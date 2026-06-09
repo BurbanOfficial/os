@@ -8,7 +8,10 @@ import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/fireba
 import {
   getAuth,
   onAuthStateChanged,
-  signOut
+  signOut,
+  updatePassword,
+  EmailAuthProvider,
+  reauthenticateWithCredential
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 import {
   getFirestore,
@@ -16,6 +19,8 @@ import {
   getDoc,
   updateDoc,
   setDoc,
+  deleteDoc,
+  addDoc,
   collection,
   query,
   where,
@@ -23,6 +28,13 @@ import {
   limit,
   serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+import {
+  getStorage,
+  ref,
+  uploadBytes,
+  getDownloadURL,
+  deleteObject
+} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js';
 
 // ── Config Firebase ───────────────────────────────────────────────────────────
 const firebaseConfig = {
@@ -35,9 +47,10 @@ const firebaseConfig = {
   measurementId: "G-8KRMJJF1C8"
 };
 
-const app  = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db   = getFirestore(app);
+const app     = initializeApp(firebaseConfig);
+const auth    = getAuth(app);
+const db      = getFirestore(app);
+const storage = getStorage(app);
 
 let currentUid  = null;
 let currentRole = 'employee'; // 'admin' | 'employee'
@@ -187,6 +200,7 @@ async function renderPageContent(pageName) {
 
     case 'projets':
       main.innerHTML = getProjectsHTML();
+      await loadProjectsData();
       initProjectsTabs();
       break;
 
@@ -260,8 +274,8 @@ async function renderPageContent(pageName) {
           </div>
           <div class="card col-12">
             <div class="section-placeholder">
-              <i class="fa-solid fa-hammer"></i>
-              <p>Le module <strong>${label}</strong> est en cours de développement.</p>
+              <i class="fa-solid fa-clock"></i>
+              <p>Le module <strong>${label}</strong> sera disponible dans une prochaine mise à jour.</p>
             </div>
           </div>
         </div>
@@ -1463,19 +1477,49 @@ function initParametres() {
         return;
       }
 
-      // Password change requires re-authentication, this is a placeholder
-      showToast('Fonctionnalité de changement de mot de passe à implémenter', 'warning');
+      try {
+        const user = auth.currentUser;
+        if (!user || !user.email) {
+          showToast('Utilisateur non authentifié', 'error');
+          return;
+        }
+
+        // Ré-authentification requise avant changement de mot de passe
+        const credential = EmailAuthProvider.credential(user.email, currentPwd);
+        await reauthenticateWithCredential(user, credential);
+
+        // Mise à jour du mot de passe
+        await updatePassword(user, newPwd);
+
+        // Effacer les champs
+        document.getElementById('current-password').value = '';
+        document.getElementById('new-password').value = '';
+        document.getElementById('confirm-password').value = '';
+
+        showToast('Mot de passe mis à jour avec succès', 'success');
+      } catch (err) {
+        console.error('Erreur changement mot de passe:', err);
+        if (err.code === 'auth/wrong-password') {
+          showToast('Mot de passe actuel incorrect', 'error');
+        } else if (err.code === 'auth/weak-password') {
+          showToast('Le nouveau mot de passe est trop faible', 'error');
+        } else if (err.code === 'auth/requires-recent-login') {
+          showToast('Veuillez vous reconnecter pour changer votre mot de passe', 'error');
+        } else {
+          showToast('Erreur lors du changement de mot de passe', 'error');
+        }
+      }
     });
   }
 
-  // 2FA setup button
+  // 2FA setup button - feature disabled for now
   document.getElementById('setup-2fa-btn')?.addEventListener('click', () => {
-    showToast('Configuration 2FA à implémenter', 'warning');
+    showToast('L\'authentification à deux facteurs sera disponible prochainement', 'info');
   });
 
-  // View sessions button
+  // View sessions button - feature disabled for now
   document.getElementById('view-sessions-btn')?.addEventListener('click', () => {
-    showToast('Gestion des sessions à implémenter', 'warning');
+    showToast('Gestion des sessions active - Fonctionnalité en développement', 'info');
   });
 
   // Delete account button
@@ -1483,7 +1527,9 @@ function initParametres() {
     if (!confirm('Êtes-vous sûr de vouloir supprimer votre compte ? Cette action est irréversible.')) return;
     if (!confirm('Cette action supprimera définitivement toutes vos données. Confirmer ?')) return;
 
-    showToast('Fonctionnalité de suppression de compte à implémenter', 'warning');
+    // Account deletion requires careful implementation with data cleanup
+    // For production safety, this is disabled until full data deletion logic is implemented
+    showToast('Cette fonctionnalité nécessite une validation administrative', 'info');
   });
 
   // Cancel button - reset form
@@ -1801,16 +1847,15 @@ function initPlanning() {
   const addRdvBtn = document.getElementById('add-rdv-btn');
   if (addRdvBtn) {
     addRdvBtn.addEventListener('click', () => {
-      alert('La fonctionnalité de création de rendez-vous sera bientôt disponible.');
+      showToast('Création de rendez-vous - En développement', 'info');
     });
   }
 
-  // Filtres
+  // Filtres - visuel uniquement pour le moment
   document.querySelectorAll('.filter-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-      // Logique de filtrage à implémenter
     });
   });
 }
@@ -2209,19 +2254,6 @@ function formatFileSize(bytes) {
   const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-}
-
-async function loadDocumentsData(uid) {
-  if (!uid) return;
-  try {
-    const q = query(collection(db, 'documents'), where('ownerId', '==', uid), limit(100));
-    const snap = await getDocs(q);
-    docsState.documents = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    updateDocumentsStats();
-    renderDocumentsContent();
-  } catch (err) {
-    console.warn('loadDocumentsData:', err);
-  }
 }
 
 function updateDocumentsStats() {
@@ -2688,40 +2720,66 @@ export function renderSuggestions(results, container) {
 
 
 /* ═══════════════════════════════════════════════════════════
-   SECTION PROJETS — Données démo
+   SECTION PROJETS — Données & Fonctionnalités
 ═══════════════════════════════════════════════════════════ */
 
-const DEMO_PROJECTS = [
-  { id: 'p1', name: 'Refonte Site Nike', client: 'Nike France', status: 'en_retard', progress: 65, startDate: '2026-04-01', endDate: '2026-06-15', lead: 'Lucas M.', tasks: { todo: 3, doing: 2, done: 8 } },
-  { id: 'p2', name: 'Campagne Renault EV', client: 'Renault', status: 'a_temps', progress: 42, startDate: '2026-05-10', endDate: '2026-07-30', lead: 'Camille B.', tasks: { todo: 5, doing: 3, done: 4 } },
-  { id: 'p3', name: 'Brand Identity Sézane', client: 'Sézane', status: 'en_avance', progress: 88, startDate: '2026-03-15', endDate: '2026-06-01', lead: 'Antoine D.', tasks: { todo: 1, doing: 1, done: 12 } },
-  { id: 'p4', name: 'App Mobile TotalEnergies', client: 'TotalEnergies', status: 'a_temps', progress: 30, startDate: '2026-05-20', endDate: '2026-09-01', lead: 'Lucas M.', tasks: { todo: 8, doing: 4, done: 3 } },
-  { id: 'p5', name: 'Packaging Evian 2027', client: 'Evian', status: 'en_avance', progress: 55, startDate: '2026-04-20', endDate: '2026-07-10', lead: 'Marie L.', tasks: { todo: 4, doing: 2, done: 6 } },
-  { id: 'p6', name: 'UX Audit BNP Paribas', client: 'BNP Paribas', status: 'en_retard', progress: 20, startDate: '2026-05-01', endDate: '2026-06-20', lead: 'Camille B.', tasks: { todo: 6, doing: 1, done: 2 } },
-];
-
-const DEMO_TASKS = {
-  todo:  [
-    { id: 't1', title: 'Brief créatif v2', project: 'Nike France', assignee: 'LM', priority: 'high' },
-    { id: 't2', title: 'Maquettes mobile', project: 'Renault', assignee: 'CB', priority: 'medium' },
-    { id: 't3', title: 'Validation client', project: 'Sézane', assignee: 'AD', priority: 'low' },
-    { id: 't4', title: 'Export assets', project: 'Evian', assignee: 'ML', priority: 'medium' },
-  ],
-  doing: [
-    { id: 't5', title: 'Refonte page accueil', project: 'Nike France', assignee: 'LM', priority: 'high' },
-    { id: 't6', title: 'Intégration animations', project: 'TotalEnergies', assignee: 'LM', priority: 'high' },
-    { id: 't7', title: 'Design system tokens', project: 'Sézane', assignee: 'AD', priority: 'medium' },
-  ],
-  review: [
-    { id: 't8', title: 'Charte graphique finale', project: 'Sézane', assignee: 'AD', priority: 'high' },
-    { id: 't9', title: 'Prototype interactif', project: 'BNP Paribas', assignee: 'CB', priority: 'medium' },
-  ],
-  done: [
-    { id: 't10', title: 'Audit concurrentiel', project: 'Renault', assignee: 'CB', priority: 'low' },
-    { id: 't11', title: 'Moodboard direction', project: 'Nike France', assignee: 'ML', priority: 'medium' },
-    { id: 't12', title: 'Workshop stakeholders', project: 'BNP Paribas', assignee: 'LM', priority: 'low' },
-  ],
+const projectsState = {
+  projects: [],
+  tasks: { todo: [], doing: [], review: [], done: [] },
+  currentTab: 'liste'
 };
+
+async function loadProjectsData() {
+  if (!currentUid) return;
+  try {
+    // Load projects
+    const projectsQuery = query(collection(db, 'projects'), limit(50));
+    const projectsSnap = await getDocs(projectsQuery);
+    projectsState.projects = projectsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    // Load tasks
+    const tasksQuery = query(collection(db, 'tasks'), where('assignees', 'array-contains', currentUid), limit(100));
+    const tasksSnap = await getDocs(tasksQuery);
+    const tasks = tasksSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    // Organize tasks by status
+    projectsState.tasks = {
+      todo: tasks.filter(t => t.status === 'todo'),
+      doing: tasks.filter(t => t.status === 'doing'),
+      review: tasks.filter(t => t.status === 'review'),
+      done: tasks.filter(t => t.status === 'done')
+    };
+
+    // Update UI if on projects page
+    const tabContent = document.getElementById('tab-content');
+    const subtitle = document.getElementById('projects-subtitle');
+    if (subtitle) subtitle.textContent = `${projectsState.projects.length} projet${projectsState.projects.length > 1 ? 's' : ''}`;
+    if (tabContent && document.querySelector('.projects-tabs')) {
+      renderProjectsContent();
+    }
+  } catch (err) {
+    console.warn('loadProjectsData:', err);
+  }
+}
+
+function renderProjectsContent() {
+  const tabContent = document.getElementById('tab-content');
+  const activeTab = document.querySelector('.projects-tab.active')?.dataset.tab || 'liste';
+
+  if (!tabContent) return;
+
+  switch (activeTab) {
+    case 'liste':
+      tabContent.innerHTML = getListeHTML();
+      break;
+    case 'kanban':
+      tabContent.innerHTML = getKanbanHTML();
+      break;
+    case 'gantt':
+      tabContent.innerHTML = getGanttHTML();
+      break;
+  }
+}
 
 // ── HTML de la page Projets ──────────────────────────────────────────────────
 
@@ -2747,7 +2805,7 @@ function getProjectsHTML() {
       <div class="page-title-row">
         <div>
           <h1 class="page-title">Projets</h1>
-          <p class="page-subtitle">${DEMO_PROJECTS.length} projets actifs</p>
+          <p class="page-subtitle" id="projects-subtitle">Chargement...</p>
         </div>
         <button class="btn-new-project" id="btn-open-project-modal">
           <i class="fa-solid fa-plus"></i>
@@ -2779,10 +2837,15 @@ function getProjectsHTML() {
 // ── Vue Liste ────────────────────────────────────────────────────────────────
 
 function getListeHTML() {
-  const rows = DEMO_PROJECTS.map(p => {
+  const projects = projectsState.projects;
+  if (projects.length === 0) {
+    return `<div class="project-list-card"><div class="section-placeholder"><i class="fa-solid fa-folder-open"></i><p>Aucun projet. Créez votre premier projet pour commencer.</p></div></div>`;
+  }
+  const rows = projects.map(p => {
     const statusLabel = { en_avance: 'En avance', a_temps: 'À temps', en_retard: 'En retard' }[p.status] ?? p.status;
     const statusClass = { en_avance: 'status-ahead', a_temps: 'status-ontime', en_retard: 'status-late' }[p.status] ?? '';
-    const totalTasks  = p.tasks.todo + p.tasks.doing + p.tasks.done;
+    const totalTasks  = (p.tasks?.todo || 0) + (p.tasks?.doing || 0) + (p.tasks?.done || 0);
+    const doneTasks = p.tasks?.done || 0;
 
     return `
       <tr class="project-row">
@@ -2804,7 +2867,7 @@ function getListeHTML() {
         </td>
         <td class="td-secondary">${p.lead}</td>
         <td class="td-secondary">${formatDate(p.endDate)}</td>
-        <td class="td-secondary">${p.tasks.done}/${totalTasks} tâches</td>
+        <td class="td-secondary">${doneTasks}/${totalTasks} tâches</td>
       </tr>`;
   }).join('');
 
@@ -2830,21 +2893,22 @@ function getListeHTML() {
 // ── Vue Kanban ───────────────────────────────────────────────────────────────
 
 function getKanbanHTML() {
+  const tasks = projectsState.tasks;
   const cols = [
-    { key: 'todo',   label: 'À faire',     color: '#94a3b8', count: DEMO_TASKS.todo.length },
-    { key: 'doing',  label: 'En cours',    color: '#4f46e5', count: DEMO_TASKS.doing.length },
-    { key: 'review', label: 'En révision', color: '#f59e0b', count: DEMO_TASKS.review.length },
-    { key: 'done',   label: 'Terminé',     color: '#10b981', count: DEMO_TASKS.done.length },
+    { key: 'todo',   label: 'À faire',     color: '#94a3b8', count: tasks.todo.length },
+    { key: 'doing',  label: 'En cours',    color: '#4f46e5', count: tasks.doing.length },
+    { key: 'review', label: 'En révision', color: '#f59e0b', count: tasks.review.length },
+    { key: 'done',   label: 'Terminé',     color: '#10b981', count: tasks.done.length },
   ];
 
   const columns = cols.map(col => {
-    const cards = (DEMO_TASKS[col.key] ?? []).map(t => `
+    const cards = (tasks[col.key] ?? []).map(t => `
       <div class="kanban-card">
         <div class="kanban-card-top">
           <span class="kanban-priority ${t.priority}">${priorityLabel(t.priority)}</span>
         </div>
         <p class="kanban-card-title">${escapeHtml(t.title)}</p>
-        <p class="kanban-card-project">${escapeHtml(t.project)}</p>
+        <p class="kanban-card-project">${escapeHtml(t.projectName || t.project || '')}</p>
         <div class="kanban-card-footer">
           <div class="kanban-assignee" title="${t.assignee}">${t.assignee}</div>
         </div>
@@ -2869,10 +2933,20 @@ function getKanbanHTML() {
 // ── Vue Gantt ────────────────────────────────────────────────────────────────
 
 function getGanttHTML() {
-  // Définir la fenêtre temporelle (60 jours à partir du 1er projet)
+  const projects = projectsState.projects;
+  if (projects.length === 0) {
+    return `<div class="section-placeholder"><i class="fa-solid fa-chart-gantt"></i><p>Aucun projet à afficher sur le diagramme de Gantt.</p></div>`;
+  }
+
+  // Calculer la fenêtre temporelle basée sur les projets réels
   const today     = new Date();
-  const startRef  = new Date('2026-04-01');
-  const totalDays = 120;
+  const dates     = projects.map(p => new Date(p.startDate)).filter(d => !isNaN(d));
+  const startRef  = dates.length > 0 ? new Date(Math.min(...dates)) : new Date();
+  startRef.setDate(startRef.getDate() - 7); // Marge avant
+  const endDates  = projects.map(p => new Date(p.endDate)).filter(d => !isNaN(d));
+  const maxEnd    = endDates.length > 0 ? new Date(Math.max(...endDates)) : new Date();
+  maxEnd.setDate(maxEnd.getDate() + 14); // Marge après
+  const totalDays = Math.max(30, Math.round((maxEnd - startRef) / 86400000));
 
   // Génération des semaines pour l'en-tête
   const weekHeaders = [];
@@ -2884,16 +2958,17 @@ function getGanttHTML() {
 
   // Indicateur "aujourd'hui"
   const todayOffset = Math.max(0, Math.round((today - startRef) / 86400000));
-  const todayPct    = (todayOffset / totalDays) * 100;
+  const todayPct    = Math.min(100, (todayOffset / totalDays) * 100);
 
-  const rows = DEMO_PROJECTS.map(p => {
-    const start    = new Date(p.startDate);
-    const end      = new Date(p.endDate);
+  const rows = projects.map(p => {
+    const start    = p.startDate ? new Date(p.startDate) : new Date();
+    const end      = p.endDate ? new Date(p.endDate) : new Date();
     const offsetD  = Math.max(0, Math.round((start - startRef) / 86400000));
     const durationD = Math.max(1, Math.round((end - start) / 86400000));
     const leftPct  = (offsetD / totalDays) * 100;
     const widthPct = Math.min((durationD / totalDays) * 100, 100 - leftPct);
     const barColor = progressColor(p.status);
+    const progress = p.progress || 0;
 
     return `
       <div class="gantt-row">
@@ -2904,7 +2979,7 @@ function getGanttHTML() {
         <div class="gantt-row-bar-area">
           <div class="gantt-today-line" style="left:${todayPct.toFixed(1)}%;"></div>
           <div class="gantt-bar" style="left:${leftPct.toFixed(1)}%; width:${widthPct.toFixed(1)}%; background:${barColor};">
-            <span class="gantt-bar-label">${p.progress}%</span>
+            <span class="gantt-bar-label">${progress}%</span>
           </div>
         </div>
       </div>`;
@@ -2915,7 +2990,7 @@ function getGanttHTML() {
       <div class="gantt-container">
         <div class="gantt-labels-col">
           <div class="gantt-header-spacer"></div>
-          ${DEMO_PROJECTS.map(p => `
+          ${projects.map(p => `
             <div class="gantt-row-label-only">
               <span class="project-color-dot" style="background:${projectColor(p.id)};"></span>
               <span class="gantt-row-name">${escapeHtml(p.name)}</span>
@@ -2923,19 +2998,20 @@ function getGanttHTML() {
         </div>
         <div class="gantt-chart-col">
           <div class="gantt-weeks-header">${weekHeaders.join('')}</div>
-          ${DEMO_PROJECTS.map(p => {
-            const start    = new Date(p.startDate);
-            const end      = new Date(p.endDate);
+          ${projects.map(p => {
+            const start    = p.startDate ? new Date(p.startDate) : new Date();
+            const end      = p.endDate ? new Date(p.endDate) : new Date();
             const offsetD  = Math.max(0, Math.round((start - startRef) / 86400000));
             const durationD = Math.max(1, Math.round((end - start) / 86400000));
             const leftPct  = (offsetD / totalDays) * 100;
             const widthPct = Math.min((durationD / totalDays) * 100, 100 - leftPct);
             const barColor = progressColor(p.status);
+            const progress = p.progress || 0;
             return `
               <div class="gantt-bar-row">
                 <div class="gantt-today-line" style="left:${todayPct.toFixed(1)}%;"></div>
-                <div class="gantt-bar" style="left:${leftPct.toFixed(1)}%; width:${widthPct.toFixed(1)}%; background:${barColor};" title="${p.name} · ${p.startDate} → ${p.endDate}">
-                  <span class="gantt-bar-label">${p.progress}%</span>
+                <div class="gantt-bar" style="left:${leftPct.toFixed(1)}%; width:${widthPct.toFixed(1)}%; background:${barColor};" title="${escapeHtml(p.name)} · ${formatDate(p.startDate)} → ${formatDate(p.endDate)}">
+                  <span class="gantt-bar-label">${progress}%</span>
                 </div>
               </div>`;
           }).join('')}
@@ -2995,11 +3071,16 @@ function initProjectsTabs() {
    MODAL CRÉATION PROJET
 ═══════════════════════════════════════════════════════════ */
 
-function openProjectModal() {
+async function openProjectModal() {
   // Supprimer un modal existant
   document.getElementById('project-modal-overlay')?.remove();
 
-  const clientOptions = DEMO_CLIENTS.map(c =>
+  // Ensure clients are loaded
+  if (clientsState.clients.length === 0) {
+    await loadClientsData();
+  }
+
+  const clientOptions = clientsState.clients.map(c =>
     `<option value="${c.id}">${escapeHtml(c.company || `${c.firstName} ${c.lastName}`)}</option>`
   ).join('');
 
@@ -3069,7 +3150,7 @@ function openProjectModal() {
   overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
 
   // Sauvegarde
-  document.getElementById('modal-save-btn').addEventListener('click', () => {
+  document.getElementById('modal-save-btn').addEventListener('click', async () => {
     const name   = document.getElementById('pm-name').value.trim();
     const client = document.getElementById('pm-client').value;
     const start  = document.getElementById('pm-start').value;
@@ -3084,43 +3165,72 @@ function openProjectModal() {
     if (!end)    { errEl.textContent = 'La date de fin est requise.';    errEl.style.display='block'; return; }
     if (end < start) { errEl.textContent = 'La date de fin doit être après la date de début.'; errEl.style.display='block'; return; }
 
-    // Ajouter dans DEMO_PROJECTS
-    const clientObj = DEMO_CLIENTS.find(c => c.id === client);
-    const newId = 'p' + (DEMO_PROJECTS.length + 1);
-    DEMO_PROJECTS.push({
-      id: newId,
-      name,
-      client: clientObj ? (clientObj.company || `${clientObj.firstName} ${clientObj.lastName}`) : client,
-      clientId: client,
-      status,
-      progress: 0,
-      startDate: start,
-      endDate: end,
-      lead: lead || '—',
-      tasks: { todo: 0, doing: 0, done: 0 },
-    });
+    try {
+      const clientObj = clientsState.clients.find(c => c.id === client);
+      const projectData = {
+        name,
+        client: clientObj ? (clientObj.company || `${clientObj.firstName} ${clientObj.lastName}`) : client,
+        clientId: client,
+        status,
+        progress: 0,
+        startDate: start,
+        endDate: end,
+        lead: lead || '—',
+        tasks: { todo: 0, doing: 0, done: 0 },
+        createdBy: currentUid,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      };
 
-    close();
-    // Recharger la vue liste
-    const content = document.getElementById('tab-content');
-    if (content) content.innerHTML = getListeHTML();
-    document.querySelectorAll('.projects-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === 'liste'));
+      await addDoc(collection(db, 'projects'), projectData);
+      showToast('Projet créé avec succès', 'success');
+
+      close();
+      await loadProjectsData();
+      renderProjectsContent();
+      document.querySelectorAll('.projects-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === 'liste'));
+    } catch (err) {
+      console.error('Erreur création projet:', err);
+      errEl.textContent = 'Erreur lors de la création du projet';
+      errEl.style.display = 'block';
+    }
   });
 }
 
 
 /* ═══════════════════════════════════════════════════════════
-   SECTION CLIENTS — Données démo
+   SECTION CLIENTS — Données & Fonctionnalités
 ═══════════════════════════════════════════════════════════ */
 
-const DEMO_CLIENTS = [
-  { id: 'c1', firstName: 'Sophie',   lastName: 'Moreau',   company: 'Nike France',    email: 'sophie.moreau@nike.fr',   phone: '06 12 34 56 78', siret: '48247479800040', projectManager: 'Lucas Martin',  color: '#4f46e5' },
-  { id: 'c2', firstName: 'Thomas',   lastName: 'Petit',    company: 'Renault',         email: 'thomas.petit@renault.com', phone: '06 23 45 67 89', siret: '78003543300040', projectManager: 'Camille Bernard', color: '#0ea5e9' },
-  { id: 'c3', firstName: 'Isabelle', lastName: 'Laurent',  company: 'Sézane',          email: 'i.laurent@sezane.com',    phone: '06 34 56 78 90', siret: '',               projectManager: 'Antoine Dubois',  color: '#10b981' },
-  { id: 'c4', firstName: 'Marc',     lastName: 'Durand',   company: 'TotalEnergies',   email: 'm.durand@total.fr',       phone: '06 45 67 89 01', siret: '54205118200013', projectManager: 'Lucas Martin',    color: '#f59e0b' },
-  { id: 'c5', firstName: 'Claire',   lastName: 'Simon',    company: 'Evian',            email: 'claire.simon@evian.fr',   phone: '06 56 78 90 12', siret: '',               projectManager: 'Marie Lambert',   color: '#a78bfa' },
-  { id: 'c6', firstName: 'Pierre',   lastName: 'Lefevre',  company: 'BNP Paribas',     email: 'p.lefevre@bnpparibas.fr', phone: '06 67 89 01 23', siret: '66204498800059', projectManager: 'Camille Bernard', color: '#ef4444' },
-];
+const clientsState = {
+  clients: [],
+  selectedId: null
+};
+
+async function loadClientsData() {
+  if (!currentUid) return;
+  try {
+    const q = query(collection(db, 'clients'), limit(100));
+    const snap = await getDocs(q);
+    clientsState.clients = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    // Update UI if on clients page
+    const clientsList = document.getElementById('clients-list');
+    if (clientsList) {
+      clientsList.innerHTML = renderClientListItems(clientsState.clients);
+      const countEl = document.getElementById('clients-count');
+      if (countEl) countEl.textContent = clientsState.clients.length;
+
+      // Select first client if none selected
+      if (!clientsState.selectedId && clientsState.clients.length > 0) {
+        clientsState.selectedId = clientsState.clients[0].id;
+        renderClientDetail(clientsState.selectedId);
+      }
+    }
+  } catch (err) {
+    console.warn('loadClientsData:', err);
+  }
+}
 
 let selectedClientId = null;
 
@@ -3146,13 +3256,13 @@ function getClientsHTML() {
       <!-- Liste des clients -->
       <div class="clients-sidebar">
         <div class="clients-sidebar-header">
-          <span class="clients-sidebar-title">Clients <span class="clients-count" id="clients-count">${DEMO_CLIENTS.length}</span></span>
+          <span class="clients-sidebar-title">Clients <span class="clients-count" id="clients-count">0</span></span>
           <button class="btn-icon" id="btn-new-client" title="Nouveau client">
             <i class="fa-solid fa-plus"></i>
           </button>
         </div>
         <div class="clients-list" id="clients-list">
-          ${renderClientListItems(DEMO_CLIENTS)}
+          <div class="clients-list-empty">Chargement...</div>
         </div>
       </div>
 
@@ -3186,10 +3296,10 @@ function renderClientListItems(clients) {
 }
 
 function renderClientDetail(clientId) {
-  const c = DEMO_CLIENTS.find(x => x.id === clientId);
+  const c = clientsState.clients.find(x => x.id === clientId);
   if (!c) return;
 
-  const clientProjects = DEMO_PROJECTS.filter(p => p.clientId === clientId || p.client === (c.company || `${c.firstName} ${c.lastName}`));
+  const clientProjects = projectsState.projects.filter(p => p.clientId === clientId || p.client === (c.company || `${c.firstName} ${c.lastName}`));
 
   const projectsHTML = clientProjects.length === 0
     ? `<p class="client-no-projects">Aucun projet associé à ce client.</p>`
@@ -3294,14 +3404,18 @@ function renderClientDetail(clientId) {
   document.getElementById('btn-edit-client')?.addEventListener('click', () => openClientModal(c.id));
 
   // Supprimer client
-  document.getElementById('btn-delete-client')?.addEventListener('click', () => {
+  document.getElementById('btn-delete-client')?.addEventListener('click', async () => {
     if (confirm(`Supprimer le client "${c.company || c.firstName + ' ' + c.lastName}" ?`)) {
-      const idx = DEMO_CLIENTS.findIndex(x => x.id === c.id);
-      if (idx !== -1) DEMO_CLIENTS.splice(idx, 1);
-      selectedClientId = null;
-      document.getElementById('client-detail').innerHTML = `<div class="client-detail-empty"><i class="fa-solid fa-user-tie"></i><p>Sélectionnez un client pour voir sa fiche</p></div>`;
-      document.getElementById('clients-list').innerHTML = renderClientListItems(DEMO_CLIENTS);
-      document.getElementById('clients-count').textContent = DEMO_CLIENTS.length;
+      try {
+        await deleteDoc(doc(db, 'clients', c.id));
+        await loadClientsData();
+        selectedClientId = null;
+        document.getElementById('client-detail').innerHTML = `<div class="client-detail-empty"><i class="fa-solid fa-user-tie"></i><p>Sélectionnez un client pour voir sa fiche</p></div>`;
+        showToast('Client supprimé', 'success');
+      } catch (err) {
+        console.error('Erreur suppression client:', err);
+        showToast('Erreur lors de la suppression', 'error');
+      }
     }
   });
 
@@ -3329,31 +3443,19 @@ function initClientsSection() {
   // Recherche
   document.getElementById('client-search-input')?.addEventListener('input', e => {
     const q = e.target.value.toLowerCase();
-    const filtered = DEMO_CLIENTS.filter(c =>
+    const filtered = clientsState.clients.filter(c =>
       `${c.firstName} ${c.lastName} ${c.company} ${c.email}`.toLowerCase().includes(q)
     );
     document.getElementById('clients-list').innerHTML = renderClientListItems(filtered);
     document.getElementById('clients-count').textContent = filtered.length;
-    // Ré-attacher les clics
-    document.getElementById('clients-list')?.addEventListener('click', e2 => {
-      const item = e2.target.closest('.client-list-item');
-      if (!item) return;
-      selectedClientId = item.dataset.clientId;
-      document.querySelectorAll('.client-list-item').forEach(el => el.classList.toggle('active', el.dataset.clientId === selectedClientId));
-      renderClientDetail(selectedClientId);
-    });
   });
 
-  // Sélectionner le premier client automatiquement
-  if (DEMO_CLIENTS.length > 0) {
-    selectedClientId = DEMO_CLIENTS[0].id;
-    document.querySelectorAll('.client-list-item').forEach(el => el.classList.toggle('active', el.dataset.clientId === selectedClientId));
-    renderClientDetail(selectedClientId);
-  }
+  // Load clients data
+  loadClientsData();
 }
 
 function openClientModal(clientId) {
-  const existing = clientId ? DEMO_CLIENTS.find(c => c.id === clientId) : null;
+  const existing = clientId ? clientsState.clients.find(c => c.id === clientId) : null;
   document.getElementById('client-modal-overlay')?.remove();
 
   const overlay = document.createElement('div');
@@ -3415,7 +3517,7 @@ function openClientModal(clientId) {
   document.getElementById('cm-cancel').addEventListener('click', close);
   overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
 
-  document.getElementById('cm-save').addEventListener('click', () => {
+  document.getElementById('cm-save').addEventListener('click', async () => {
     const firstName = document.getElementById('cm-firstname').value.trim();
     const lastName  = document.getElementById('cm-lastname').value.trim();
     const email     = document.getElementById('cm-email').value.trim();
@@ -3427,8 +3529,8 @@ function openClientModal(clientId) {
 
     const colors = ['#4f46e5','#0ea5e9','#10b981','#f59e0b','#a78bfa','#ef4444'];
 
-    if (existing) {
-      Object.assign(existing, {
+    try {
+      const clientData = {
         firstName,
         lastName,
         company:        document.getElementById('cm-company').value.trim(),
@@ -3436,31 +3538,31 @@ function openClientModal(clientId) {
         phone:          document.getElementById('cm-phone').value.trim(),
         siret:          document.getElementById('cm-siret').value.trim(),
         projectManager: document.getElementById('cm-pm').value.trim(),
-      });
-    } else {
-      DEMO_CLIENTS.push({
-        id:             'c' + (DEMO_CLIENTS.length + 1),
-        firstName,
-        lastName,
-        company:        document.getElementById('cm-company').value.trim(),
-        email,
-        phone:          document.getElementById('cm-phone').value.trim(),
-        siret:          document.getElementById('cm-siret').value.trim(),
-        projectManager: document.getElementById('cm-pm').value.trim(),
-        color:          colors[DEMO_CLIENTS.length % colors.length],
-      });
-    }
+        updatedAt: serverTimestamp()
+      };
 
-    close();
-    // Rafraîchir la liste et la fiche
-    const listEl = document.getElementById('clients-list');
-    if (listEl) listEl.innerHTML = renderClientListItems(DEMO_CLIENTS);
-    const countEl = document.getElementById('clients-count');
-    if (countEl) countEl.textContent = DEMO_CLIENTS.length;
-    const targetId = existing ? clientId : DEMO_CLIENTS[DEMO_CLIENTS.length - 1].id;
-    selectedClientId = targetId;
-    document.querySelectorAll('.client-list-item').forEach(el => el.classList.toggle('active', el.dataset.clientId === selectedClientId));
-    renderClientDetail(targetId);
+      if (existing) {
+        await updateDoc(doc(db, 'clients', clientId), clientData);
+        showToast('Client mis à jour', 'success');
+      } else {
+        clientData.color = colors[clientsState.clients.length % colors.length];
+        clientData.createdAt = serverTimestamp();
+        const newClientRef = await addDoc(collection(db, 'clients'), clientData);
+        selectedClientId = newClientRef.id;
+        showToast('Client créé', 'success');
+      }
+
+      close();
+      await loadClientsData();
+
+      // Select the client
+      document.querySelectorAll('.client-list-item').forEach(el => el.classList.toggle('active', el.dataset.clientId === selectedClientId));
+      renderClientDetail(selectedClientId);
+    } catch (err) {
+      console.error('Erreur sauvegarde client:', err);
+      errEl.textContent = 'Erreur lors de la sauvegarde';
+      errEl.style.display = 'block';
+    }
   });
 }
 
@@ -3474,113 +3576,41 @@ function openProjectModalForClient(clientId) {
 
 
 /* ═══════════════════════════════════════════════════════════
-   SECTION MESSAGERIE — Données démo
+   SECTION MESSAGERIE — En développement
 ═══════════════════════════════════════════════════════════ */
-
-const DEMO_TEAM = [
-  { id: 'u1', name: 'Lucas Martin',   initials: 'LM', color: '#0ea5e9', status: 'disponible',   role: 'Développeur' },
-  { id: 'u2', name: 'Camille Bernard',initials: 'CB', color: '#a78bfa', status: 'disponible',   role: 'Designer' },
-  { id: 'u3', name: 'Antoine Dubois', initials: 'AD', color: '#10b981', status: 'en_pause',     role: 'Directeur Artistique' },
-  { id: 'u4', name: 'Marie Lambert',  initials: 'ML', color: '#f59e0b', status: 'indisponible', role: 'Chef de projet' },
-  { id: 'u5', name: 'Julie Chen',     initials: 'JC', color: '#ef4444', status: 'disponible',   role: 'UX Designer' },
-];
-
-const DEMO_CONVS = [
-  {
-    id: 'conv1', userId: 'u1',
-    lastMsg: 'Ok parfait, je regarde ça ce soir.', lastTime: '14:32', unread: 2,
-    messages: [
-      { from: 'u1', text: 'Salut ! Tu as regardé le brief Nike ?', time: '14:20' },
-      { from: 'me', text: 'Oui, je l\'ai lu ce matin. Des questions ?', time: '14:22' },
-      { from: 'u1', text: 'Le délai me semble court. Faisable en 3 semaines ?', time: '14:25' },
-      { from: 'me', text: 'Si on démarre lundi oui. Je bloque du temps.', time: '14:28' },
-      { from: 'u1', text: 'Ok parfait, je regarde ça ce soir.', time: '14:32' },
-    ]
-  },
-  {
-    id: 'conv2', userId: 'u2',
-    lastMsg: 'Les maquettes sont prêtes pour review.', lastTime: '11:15', unread: 0,
-    messages: [
-      { from: 'u2', text: 'Bonjour ! J\'ai terminé les maquettes homepage.', time: '10:45' },
-      { from: 'me', text: 'Super, tu peux partager le lien Figma ?', time: '10:48' },
-      { from: 'u2', text: 'Voilà : figma.com/file/xyz — accès donné', time: '10:52' },
-      { from: 'me', text: 'Merci, je regarde ça dans l\'après-midi.', time: '11:10' },
-      { from: 'u2', text: 'Les maquettes sont prêtes pour review.', time: '11:15' },
-    ]
-  },
-  {
-    id: 'conv3', userId: 'u3',
-    lastMsg: 'Réunion annulée pour demain.', lastTime: 'Hier', unread: 1,
-    messages: [
-      { from: 'u3', text: 'On fait le point sur Sézane ?', time: 'Hier 09:00' },
-      { from: 'me', text: 'Oui, 14h ça te va ?', time: 'Hier 09:10' },
-      { from: 'u3', text: 'Réunion annulée pour demain.', time: 'Hier 17:30' },
-    ]
-  },
-  {
-    id: 'conv4', userId: 'u4',
-    lastMsg: 'Budget validé par le client.', lastTime: 'Lun', unread: 0,
-    messages: [
-      { from: 'u4', text: 'Update sur TotalEnergies : budget validé par le client.', time: 'Lun 16:00' },
-      { from: 'me', text: 'Excellent ! On peut démarrer le sprint 2.', time: 'Lun 16:05' },
-      { from: 'u4', text: 'Budget validé par le client.', time: 'Lun 16:00' },
-    ]
-  },
-];
 
 let activeConvId = null;
 
+async function loadMessagerieData() {
+  // Messaging module is in development
+  // This will load real conversations from Firestore when implemented
+}
+
 function getMessagerieHTML() {
   return `
-    <div class="messagerie-layout">
-
-      <!-- Colonne 1 : équipe en ligne -->
-      <div class="msg-team-col">
-        <div class="msg-col-header">
-          <span class="msg-col-title">Équipe</span>
-        </div>
-        <div class="msg-team-list">
-          ${DEMO_TEAM.map(u => {
-            const statusColor = { disponible: '#10b981', en_pause: '#f59e0b', indisponible: '#ef4444' }[u.status] ?? '#94a3b8';
-            const statusLabel = { disponible: 'Disponible', en_pause: 'En pause', indisponible: 'Indisponible' }[u.status] ?? u.status;
-            return `
-              <div class="msg-team-item" data-user-id="${u.id}" title="${u.name}">
-                <div class="msg-team-avatar" style="background:${u.color}20; color:${u.color};">
-                  ${u.initials}
-                  <span class="msg-team-dot" style="background:${statusColor};"></span>
-                </div>
-                <div class="msg-team-info">
-                  <p class="msg-team-name">${u.name}</p>
-                  <p class="msg-team-status" style="color:${statusColor};">${statusLabel}</p>
-                </div>
-              </div>`;
-          }).join('')}
+    <div class="page-header">
+      <div class="header-actions" style="margin-left:auto;">
+        <button class="header-btn" title="Notifications">
+          <i class="fa-regular fa-bell"></i>
+          <span class="notif-dot"></span>
+        </button>
+        <img src="https://ui-avatars.com/api/?name=U&background=4f46e5&color=fff&size=32" class="header-avatar" id="header-avatar">
+      </div>
+    </div>
+    <div class="page-body">
+      <div class="page-title-row">
+        <div>
+          <h1 class="page-title">Messagerie</h1>
+          <p class="page-subtitle">Communiquez avec votre équipe</p>
         </div>
       </div>
-
-      <!-- Colonne 2 : liste des conversations -->
-      <div class="msg-convs-col">
-        <div class="msg-col-header">
-          <span class="msg-col-title">Messages</span>
-          <span class="msg-unread-total">${DEMO_CONVS.reduce((s,c)=>s+c.unread,0)}</span>
-        </div>
-        <div class="msg-search">
-          <i class="fa-solid fa-magnifying-glass"></i>
-          <input type="text" id="msg-search-input" placeholder="Rechercher une conversation…">
-        </div>
-        <div class="msg-convs-list" id="msg-convs-list">
-          ${renderConvList(DEMO_CONVS)}
+      <div class="card col-12">
+        <div class="section-placeholder">
+          <i class="fa-solid fa-comments"></i>
+          <p>La messagerie interne sera disponible dans une prochaine mise à jour.</p>
+          <p style="font-size:13px;color:var(--text-muted);margin-top:8px;">Utilisez les commentaires sur les projets et tâches en attendant.</p>
         </div>
       </div>
-
-      <!-- Colonne 3 : conversation active -->
-      <div class="msg-chat-col" id="msg-chat-col">
-        <div class="msg-chat-empty">
-          <i class="fa-solid fa-comment-dots"></i>
-          <p>Sélectionnez une conversation</p>
-        </div>
-      </div>
-
     </div>
   `;
 }
@@ -3743,42 +3773,42 @@ function initMessagerie() {
    SECTION UTILISATEURS (ADMIN)
 ═══════════════════════════════════════════════════════════ */
 
-// Données démo utilisateurs avec permissions par section
-const DEMO_USERS = [
-  {
-    id: 'usr1', displayName: 'Lucas Martin',    email: 'lucas.martin@agora.fr',    role: 'admin',
-    status: 'disponible', createdAt: '2026-01-10',
-    permissions: { dashboard: ['view','edit'], clients: ['view','edit','delete','export'], projets: ['view','edit','delete','export'], messagerie: ['view','edit'], planning: ['view','edit','delete'], documents: ['view','edit','delete','export'], parametres: ['view','edit'] },
-  },
-  {
-    id: 'usr2', displayName: 'Camille Bernard', email: 'camille.bernard@agora.fr',  role: 'employee',
-    status: 'disponible', createdAt: '2026-02-03',
-    permissions: { dashboard: ['view'], clients: ['view','edit'], projets: ['view','edit'], messagerie: ['view','edit'], planning: ['view','edit'], documents: ['view','edit'], parametres: ['view'] },
-  },
-  {
-    id: 'usr3', displayName: 'Antoine Dubois',  email: 'antoine.dubois@agora.fr',  role: 'employee',
-    status: 'en_pause',  createdAt: '2026-02-15',
-    permissions: { dashboard: ['view'], clients: ['view'], projets: ['view','edit'], messagerie: ['view','edit'], planning: ['view'], documents: ['view','edit'], parametres: ['view'] },
-  },
-  {
-    id: 'usr4', displayName: 'Marie Lambert',   email: 'marie.lambert@agora.fr',   role: 'employee',
-    status: 'indisponible', createdAt: '2026-03-01',
-    permissions: { dashboard: ['view'], clients: ['view','edit','export'], projets: ['view','edit','export'], messagerie: ['view','edit'], planning: ['view','edit'], documents: ['view'], parametres: ['view'] },
-  },
-  {
-    id: 'usr5', displayName: 'Julie Chen',      email: 'julie.chen@agora.fr',      role: 'employee',
-    status: 'disponible', createdAt: '2026-04-20',
-    permissions: { dashboard: ['view'], clients: ['view'], projets: ['view'], messagerie: ['view','edit'], planning: ['view'], documents: ['view'], parametres: ['view'] },
-  },
-];
+const usersState = {
+  users: [],
+  selectedId: null
+};
 
 let selectedUserId = null;
+
+async function loadUsersData() {
+  if (!currentUid || currentRole !== 'admin') return;
+  try {
+    const q = query(collection(db, 'users'), limit(100));
+    const snap = await getDocs(q);
+    usersState.users = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    // Update UI if on users page
+    const usersList = document.getElementById('users-list');
+    if (usersList) {
+      usersList.innerHTML = renderUserListItems(usersState.users);
+      updateUserStats();
+
+      if (!selectedUserId && usersState.users.length > 0) {
+        selectedUserId = usersState.users[0].id;
+        document.querySelectorAll('.users-list-item').forEach(el => el.classList.toggle('active', el.dataset.userId === selectedUserId));
+        renderUserDetail(selectedUserId);
+      }
+    }
+  } catch (err) {
+    console.warn('loadUsersData:', err);
+  }
+}
 
 // ── HTML principal ───────────────────────────────────────────────────────────
 
 function getUsersAdminHTML() {
-  const adminCount    = DEMO_USERS.filter(u => u.role === 'admin').length;
-  const employeeCount = DEMO_USERS.filter(u => u.role === 'employee').length;
+  const adminCount    = usersState.users.filter(u => u.role === 'admin').length;
+  const employeeCount = usersState.users.filter(u => u.role === 'employee').length;
 
   return `
     <div class="page-header">
@@ -3808,7 +3838,7 @@ function getUsersAdminHTML() {
         <!-- Résumé -->
         <div class="users-admin-stats">
           <div class="users-stat-pill">
-            <span class="users-stat-num">${DEMO_USERS.length}</span>
+            <span class="users-stat-num" id="users-total-count">0</span>
             <span class="users-stat-label">Total</span>
           </div>
           <div class="users-stat-pill accent">
@@ -3822,7 +3852,7 @@ function getUsersAdminHTML() {
         </div>
 
         <div class="users-list" id="users-list">
-          ${renderUserListItems(DEMO_USERS)}
+          <div class="clients-list-empty">Chargement...</div>
         </div>
       </div>
 
@@ -3864,7 +3894,7 @@ function roleColor(role) {
 // ── Fiche utilisateur + permissions ─────────────────────────────────────────
 
 function renderUserDetail(userId) {
-  const u = DEMO_USERS.find(x => x.id === userId);
+  const u = usersState.users.find(x => x.id === userId);
   if (!u) return;
 
   const statusColor = { disponible: '#10b981', en_pause: '#f59e0b', indisponible: '#ef4444' }[u.status] ?? '#94a3b8';
@@ -3989,14 +4019,18 @@ function renderUserDetail(userId) {
 
   // Attacher les événements
   document.getElementById('btn-edit-user')?.addEventListener('click', () => openUserModal(u.id));
-  document.getElementById('btn-delete-user')?.addEventListener('click', () => {
+  document.getElementById('btn-delete-user')?.addEventListener('click', async () => {
     if (confirm(`Supprimer l'utilisateur "${u.displayName}" ?`)) {
-      const idx = DEMO_USERS.findIndex(x => x.id === u.id);
-      if (idx !== -1) DEMO_USERS.splice(idx, 1);
-      selectedUserId = null;
-      document.getElementById('users-list').innerHTML = renderUserListItems(DEMO_USERS);
-      document.getElementById('users-admin-detail').innerHTML = `<div class="client-detail-empty"><i class="fa-solid fa-shield-halved"></i><p>Sélectionnez un utilisateur pour gérer ses accès</p></div>`;
-      updateUserStats();
+      try {
+        await deleteDoc(doc(db, 'users', u.id));
+        await loadUsersData();
+        selectedUserId = null;
+        document.getElementById('users-admin-detail').innerHTML = `<div class="client-detail-empty"><i class="fa-solid fa-shield-halved"></i><p>Sélectionnez un utilisateur pour gérer ses accès</p></div>`;
+        showToast('Utilisateur supprimé', 'success');
+      } catch (err) {
+        console.error('Erreur suppression utilisateur:', err);
+        showToast('Erreur lors de la suppression', 'error');
+      }
     }
   });
 
@@ -4025,8 +4059,8 @@ function renderUserDetail(userId) {
   });
 
   // Sauvegarder
-  document.getElementById('btn-save-perms')?.addEventListener('click', () => {
-    const targetUser = DEMO_USERS.find(x => x.id === userId);
+  document.getElementById('btn-save-perms')?.addEventListener('click', async () => {
+    const targetUser = usersState.users.find(x => x.id === userId);
     if (!targetUser) return;
     // Reconstruire les permissions depuis les checkboxes
     const newPerms = {};
@@ -4068,19 +4102,15 @@ function initUsersAdmin() {
   // Recherche
   document.getElementById('users-search-input')?.addEventListener('input', e => {
     const q = e.target.value.toLowerCase();
-    const filtered = DEMO_USERS.filter(u =>
+    const filtered = usersState.users.filter(u =>
       `${u.displayName} ${u.email} ${u.role}`.toLowerCase().includes(q)
     );
     document.getElementById('users-list').innerHTML = renderUserListItems(filtered);
     reattachUserListClicks();
   });
 
-  // Sélectionner le premier
-  if (DEMO_USERS.length > 0) {
-    selectedUserId = DEMO_USERS[0].id;
-    document.querySelectorAll('.users-list-item').forEach(el => el.classList.toggle('active', el.dataset.userId === selectedUserId));
-    renderUserDetail(selectedUserId);
-  }
+  // Load users data
+  loadUsersData();
 }
 
 function reattachUserListClicks() {
@@ -4094,10 +4124,11 @@ function reattachUserListClicks() {
 }
 
 function updateUserStats() {
-  const adminCount    = DEMO_USERS.filter(u => u.role === 'admin').length;
-  const employeeCount = DEMO_USERS.filter(u => u.role === 'employee').length;
+  const adminCount    = usersState.users.filter(u => u.role === 'admin').length;
+  const employeeCount = usersState.users.filter(u => u.role === 'employee').length;
+  const totalEl = document.getElementById('users-total-count');
   const pills = document.querySelectorAll('.users-stat-num');
-  if (pills[0]) pills[0].textContent = DEMO_USERS.length;
+  if (totalEl) totalEl.textContent = usersState.users.length;
   if (pills[1]) pills[1].textContent = adminCount;
   if (pills[2]) pills[2].textContent = employeeCount;
 }
@@ -4105,7 +4136,7 @@ function updateUserStats() {
 // ── Modal utilisateur ────────────────────────────────────────────────────────
 
 function openUserModal(userId) {
-  const existing = userId ? DEMO_USERS.find(u => u.id === userId) : null;
+  const existing = userId ? usersState.users.find(u => u.id === userId) : null;
   document.getElementById('user-modal-overlay')?.remove();
 
   const overlay = document.createElement('div');
@@ -4166,7 +4197,7 @@ function openUserModal(userId) {
   document.getElementById('um-cancel').addEventListener('click', close);
   overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
 
-  document.getElementById('um-save').addEventListener('click', () => {
+  document.getElementById('um-save').addEventListener('click', async () => {
     const name     = document.getElementById('um-name').value.trim();
     const email    = document.getElementById('um-email').value.trim();
     const role     = document.getElementById('um-role').value;
@@ -4178,34 +4209,44 @@ function openUserModal(userId) {
     if (!email) { errEl.textContent = 'L\'email est requis.'; errEl.style.display='block'; return; }
     if (!existing && password.length < 8) { errEl.textContent = 'Le mot de passe doit faire au moins 8 caractères.'; errEl.style.display='block'; return; }
 
-    // Permissions par défaut pour un nouvel employé
-    const defaultPerms = {};
-    SECTIONS.forEach(sec => { defaultPerms[sec.key] = ['view']; });
+    try {
+      // Permissions par défaut pour un nouvel employé
+      const defaultPerms = {};
+      SECTIONS.forEach(sec => { defaultPerms[sec.key] = ['view']; });
 
-    if (existing) {
-      Object.assign(existing, { displayName: name, email, role, status });
-    } else {
-      DEMO_USERS.push({
-        id:          'usr' + (DEMO_USERS.length + 1),
+      const userData = {
         displayName: name,
         email,
         role,
         status,
-        createdAt:   new Date().toISOString().slice(0,10),
-        permissions: role === 'admin'
-          ? Object.fromEntries(SECTIONS.map(s => [s.key, ['view','edit','delete','export']]))
-          : defaultPerms,
-      });
-    }
+        updatedAt: serverTimestamp()
+      };
 
-    close();
-    document.getElementById('users-list').innerHTML = renderUserListItems(DEMO_USERS);
-    updateUserStats();
-    const targetId = existing ? userId : DEMO_USERS[DEMO_USERS.length - 1].id;
-    selectedUserId = targetId;
-    document.querySelectorAll('.users-list-item').forEach(el => el.classList.toggle('active', el.dataset.userId === selectedUserId));
-    reattachUserListClicks();
-    renderUserDetail(targetId);
+      if (existing) {
+        await updateDoc(doc(db, 'users', userId), userData);
+        showToast('Utilisateur mis à jour', 'success');
+      } else {
+        userData.permissions = role === 'admin'
+          ? Object.fromEntries(SECTIONS.map(s => [s.key, ['view','edit','delete','export']]))
+          : defaultPerms;
+        userData.createdAt = serverTimestamp();
+        // Note: Creating users with passwords requires Firebase Auth Admin SDK
+        // For now, we just create the user document
+        const newUserRef = await addDoc(collection(db, 'users'), userData);
+        selectedUserId = newUserRef.id;
+        showToast('Utilisateur créé (pensez à créer le compte dans Firebase Auth)', 'success');
+      }
+
+      close();
+      await loadUsersData();
+      document.querySelectorAll('.users-list-item').forEach(el => el.classList.toggle('active', el.dataset.userId === selectedUserId));
+      reattachUserListClicks();
+      renderUserDetail(selectedUserId);
+    } catch (err) {
+      console.error('Erreur sauvegarde utilisateur:', err);
+      errEl.textContent = 'Erreur lors de la sauvegarde';
+      errEl.style.display = 'block';
+    }
   });
 }
 
