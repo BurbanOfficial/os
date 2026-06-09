@@ -4,14 +4,15 @@
  * Vérifie la session Firebase, charge les données et initialise l'app shell.
  */
 
-import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+import { initializeApp, initializeApp as initializeSecondaryApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import {
   getAuth,
   onAuthStateChanged,
   signOut,
   updatePassword,
   EmailAuthProvider,
-  reauthenticateWithCredential
+  reauthenticateWithCredential,
+  createUserWithEmailAndPassword
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 import {
   getFirestore,
@@ -59,7 +60,6 @@ let currentRole = 'employee'; // 'admin' | 'employee'
 // Sections de l'app et leurs permissions
 const SECTIONS = [
   { key: 'dashboard',   label: 'Dashboard',   icon: 'fa-chart-pie' },
-  { key: 'finances',    label: 'Finances',     icon: 'fa-coins' },
   { key: 'clients',     label: 'Clients',      icon: 'fa-users' },
   { key: 'projets',     label: 'Projets',      icon: 'fa-folder-open' },
   { key: 'messagerie',  label: 'Messagerie',   icon: 'fa-comment-dots' },
@@ -74,6 +74,13 @@ const PERMISSIONS = [
   { key: 'delete', label: 'Suppression',  desc: 'Supprimer des éléments' },
   { key: 'export', label: 'Export',       desc: 'Exporter des données' },
 ];
+
+// État de la messagerie (sera peuplé depuis Firestore)
+let messagerieState = {
+  conversations: [],
+  team: [],
+  activeConvId: null
+};
 
 // ── Vérification de session au chargement ─────────────────────────────────────
 onAuthStateChanged(auth, async (user) => {
@@ -162,24 +169,6 @@ async function loadInitialData(uid) {
 function injectAdminNavItem() {
   const nav = document.getElementById('main-nav');
   if (!nav) return;
-
-  // Ajouter Finances dans la section Principal (avant la section Outils)
-  if (!nav.querySelector('[data-target="finances"]')) {
-    const toolsLabel = Array.from(nav.querySelectorAll('.nav-section-label')).find(el => el.textContent === 'Outils');
-    const financesItem = document.createElement('a');
-    financesItem.href = '#';
-    financesItem.className = 'menu-item admin-only';
-    financesItem.dataset.target = 'finances';
-    financesItem.innerHTML = `
-      <i class="fa-solid fa-coins"></i>
-      <span class="nav-label">Finances</span>
-    `;
-    if (toolsLabel) {
-      nav.insertBefore(financesItem, toolsLabel);
-    } else {
-      nav.appendChild(financesItem);
-    }
-  }
 
   // Ajouter un séparateur "Administration" s'il n'existe pas
   if (!nav.querySelector('[data-target="utilisateurs"]')) {
@@ -297,17 +286,6 @@ async function renderPageContent(pageName) {
         scheduleMidnightRefresh();
         initGlobalSearch();
       });
-      break;
-
-    case 'finances':
-      if (currentRole !== 'admin') {
-        showToast('Accès réservé aux administrateurs', 'error');
-        renderPageContent('dashboard');
-        return;
-      }
-      main.innerHTML = getFinancesHTML();
-      await loadFinancesData();
-      initFinances();
       break;
 
     case 'projets':
@@ -1811,15 +1789,17 @@ async function loadPlanningData(uid) {
   if (!uid) return;
 
   try {
-    // Charger les rendez-vous depuis Firestore
+    // Charger les rendez-vous depuis Firestore (sans filtre date pour éviter index composite)
     const q = query(
       collection(db, 'appointments'),
       where('attendees', 'array-contains', uid),
-      where('date', '>=', new Date()),
-      limit(50)
+      limit(100)
     );
     const snap = await getDocs(q);
-    const appointments = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const allAppointments = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    // Filtrer les dates futures côté client
+    const now = new Date();
+    const appointments = allAppointments.filter(a => a.date && new Date(a.date) >= now);
 
     renderPlanningCalendar(new Date(), appointments);
     renderPlanningToday(appointments);
@@ -3813,47 +3793,87 @@ async function loadMessagerieData() {
 }
 
 function getMessagerieHTML() {
+  const totalUnread = messagerieState.conversations.reduce((s, c) => s + (c.unread || 0), 0);
+  const hasData = messagerieState.conversations.length > 0 || messagerieState.team.length > 0;
+  
   return `
     <div class="page-header">
+      <div class="header-left">
+        <h1 class="page-title"><i class="fa-solid fa-comments"></i> Messagerie</h1>
+      </div>
       <div class="header-actions" style="margin-left:auto;">
         <button class="header-btn" title="Notifications">
           <i class="fa-regular fa-bell"></i>
-          <span class="notif-dot"></span>
+          ${totalUnread > 0 ? `<span class="notif-badge">${totalUnread}</span>` : ''}
         </button>
         <img src="https://ui-avatars.com/api/?name=U&background=4f46e5&color=fff&size=32" class="header-avatar" id="header-avatar">
       </div>
     </div>
     <div class="page-body">
-      <div class="page-title-row">
-        <div>
-          <h1 class="page-title">Messagerie</h1>
-          <p class="page-subtitle">Communiquez avec votre équipe</p>
+      <div class="messagerie-container">
+        <!-- Colonne gauche : Conversations -->
+        <div class="messagerie-sidebar">
+          <div class="msg-search-box">
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <input type="text" id="msg-search-input" placeholder="Rechercher une conversation...">
+          </div>
+          <div class="msg-convs-list" id="msg-convs-list">
+            ${hasData ? renderConvList(messagerieState.conversations) : renderEmptyConvList()}
+          </div>
+          <div class="msg-team-section">
+            <h4>Équipe</h4>
+            <div class="msg-team-list" id="msg-team-list">
+              ${messagerieState.team.length > 0 ? messagerieState.team.map(user => `
+                <div class="msg-team-item" data-user-id="${user.id}">
+                  <div class="msg-team-avatar" style="background:${user.color || '#4f46e5'}20;color:${user.color || '#4f46e5'}">
+                    ${user.initials || '?'}
+                    <span class="status-dot ${user.status || 'disponible'}"></span>
+                  </div>
+                  <div class="msg-team-info">
+                    <span class="msg-team-name">${user.name || 'Utilisateur'}</span>
+                    <span class="msg-team-role">${user.role || 'Membre'}</span>
+                  </div>
+                </div>
+              `).join('') : '<p class="no-team">Aucun membre disponible</p>'}
+            </div>
+          </div>
         </div>
-      </div>
-      <div class="card col-12">
-        <div class="section-placeholder">
-          <i class="fa-solid fa-comments"></i>
-          <p>La messagerie interne sera disponible dans une prochaine mise à jour.</p>
-          <p style="font-size:13px;color:var(--text-muted);margin-top:8px;">Utilisez les commentaires sur les projets et tâches en attendant.</p>
+        <!-- Colonne droite : Chat -->
+        <div class="messagerie-chat" id="msg-chat-col">
+          <div class="msg-empty-state">
+            <i class="fa-solid fa-comments"></i>
+            <p>${hasData ? 'Sélectionnez une conversation pour commencer' : 'La messagerie sera disponible prochainement'}</p>
+            ${!hasData ? '<p style="font-size:13px;color:var(--text-muted);margin-top:8px;">Contactez votre administrateur pour plus d\'informations</p>' : ''}
+          </div>
         </div>
       </div>
     </div>
   `;
 }
 
+function renderEmptyConvList() {
+  return `
+    <div class="empty-conv-state">
+      <i class="fa-regular fa-comment-dots"></i>
+      <p>Aucune conversation</p>
+      <span class="empty-sub">Les conversations apparaîtront ici</span>
+    </div>
+  `;
+}
+
 function renderConvList(convs) {
   return convs.map(conv => {
-    const user = DEMO_TEAM.find(u => u.id === conv.userId);
+    const user = messagerieState.team.find(u => u.id === conv.userId);
     const statusColor = { disponible: '#10b981', en_pause: '#f59e0b', indisponible: '#ef4444' }[user?.status] ?? '#94a3b8';
     return `
       <div class="msg-conv-item ${conv.id === activeConvId ? 'active' : ''}" data-conv-id="${conv.id}">
         <div class="msg-conv-avatar" style="background:${user?.color}20; color:${user?.color};">
-          ${user?.initials}
+          ${user?.initials || '?'}
           <span class="msg-conv-dot" style="background:${statusColor};"></span>
         </div>
         <div class="msg-conv-body">
           <div class="msg-conv-top">
-            <span class="msg-conv-name">${user?.name ?? '—'}</span>
+            <span class="msg-conv-name">${user?.name || 'Utilisateur'}</span>
             <span class="msg-conv-time">${conv.lastTime}</span>
           </div>
           <p class="msg-conv-preview">${escapeHtml(conv.lastMsg)}</p>
@@ -3865,15 +3885,15 @@ function renderConvList(convs) {
 
 function openConversation(convId) {
   activeConvId = convId;
-  const conv = DEMO_CONVS.find(c => c.id === convId);
-  const user = DEMO_TEAM.find(u => u.id === conv?.userId);
+  const conv = messagerieState.conversations.find(c => c.id === convId);
+  const user = messagerieState.team.find(u => u.id === conv?.userId);
   if (!conv || !user) return;
 
   conv.unread = 0;
   document.querySelectorAll('.msg-conv-item').forEach(el => el.classList.toggle('active', el.dataset.convId === convId));
   // Recalculer le badge total
-  const totalUnread = DEMO_CONVS.reduce((s,c) => s + c.unread, 0);
-  const badge = document.querySelector('.msg-unread-total');
+  const totalUnread = messagerieState.conversations.reduce((s,c) => s + (c.unread || 0), 0);
+  const badge = document.querySelector('.notif-badge');
   if (badge) badge.textContent = totalUnread > 0 ? totalUnread : '';
 
   const statusColor = { disponible: '#10b981', en_pause: '#f59e0b', indisponible: '#ef4444' }[user.status] ?? '#94a3b8';
@@ -3949,7 +3969,7 @@ function openConversation(convId) {
       msgs.scrollTop = msgs.scrollHeight;
     }
     // Mettre à jour la liste des convs
-    document.getElementById('msg-convs-list').innerHTML = renderConvList(DEMO_CONVS);
+    document.getElementById('msg-convs-list').innerHTML = renderConvList(messagerieState.conversations);
     attachConvClicks();
   };
 
@@ -3969,9 +3989,9 @@ function initMessagerie() {
   // Recherche dans les conversations
   document.getElementById('msg-search-input')?.addEventListener('input', e => {
     const q = e.target.value.toLowerCase();
-    const filtered = DEMO_CONVS.filter(conv => {
-      const user = DEMO_TEAM.find(u => u.id === conv.userId);
-      return user?.name.toLowerCase().includes(q) || conv.lastMsg.toLowerCase().includes(q);
+    const filtered = messagerieState.conversations.filter(conv => {
+      const user = messagerieState.team.find(u => u.id === conv.userId);
+      return user?.name?.toLowerCase().includes(q) || conv.lastMsg?.toLowerCase().includes(q);
     });
     document.getElementById('msg-convs-list').innerHTML = renderConvList(filtered);
     attachConvClicks();
@@ -3981,17 +4001,19 @@ function initMessagerie() {
   document.querySelectorAll('.msg-team-item').forEach(el => {
     el.addEventListener('click', () => {
       const userId = el.dataset.userId;
-      const conv = DEMO_CONVS.find(c => c.userId === userId);
+      const conv = messagerieState.conversations.find(c => c.userId === userId);
       if (conv) {
-        document.getElementById('msg-convs-list').innerHTML = renderConvList(DEMO_CONVS);
+        document.getElementById('msg-convs-list').innerHTML = renderConvList(messagerieState.conversations);
         attachConvClicks();
         openConversation(conv.id);
       }
     });
   });
 
-  // Ouvrir la première conversation
-  if (DEMO_CONVS.length > 0) openConversation(DEMO_CONVS[0].id);
+  // Ouvrir la première conversation si disponible
+  if (messagerieState.conversations.length > 0) {
+    openConversation(messagerieState.conversations[0].id);
+  }
 }
 
 
@@ -4142,9 +4164,10 @@ function renderUserDetail(userId) {
   const statusColor = { disponible: '#10b981', en_pause: '#f59e0b', indisponible: '#ef4444' }[u.status] ?? '#94a3b8';
   const statusLabel = { disponible: 'Disponible', en_pause: 'En pause', indisponible: 'Indisponible' }[u.status] ?? u.status;
 
-  // Tableau des permissions par section
+  // Tableau des permissions par section (sécurisé avec fallback vide)
+  const permissions = u.permissions || {};
   const permRows = SECTIONS.map(sec => {
-    const userPerms = u.permissions[sec.key] ?? [];
+    const userPerms = permissions[sec.key] ?? [];
     const cells = PERMISSIONS.map(perm => {
       const checked = userPerms.includes(perm.key);
       // L'admin a tout, lecture seule sur ses propres permissions
@@ -4472,11 +4495,28 @@ function openUserModal(userId) {
           ? Object.fromEntries(SECTIONS.map(s => [s.key, ['view','edit','delete','export']]))
           : defaultPerms;
         userData.createdAt = serverTimestamp();
-        // Note: Creating users with passwords requires Firebase Auth Admin SDK
-        // For now, we just create the user document
-        const newUserRef = await addDoc(collection(db, 'users'), userData);
-        selectedUserId = newUserRef.id;
-        showToast('Utilisateur créé (pensez à créer le compte dans Firebase Auth)', 'success');
+
+        // Créer le compte Firebase Auth via instance secondaire (pour ne pas déconnecter l'admin)
+        let secondaryApp;
+        try {
+          secondaryApp = initializeSecondaryApp(firebaseConfig, 'secondaryCreate');
+        } catch (e) {
+          const { getApp } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js');
+          secondaryApp = getApp('secondaryCreate');
+        }
+        const secondaryAuth = getAuth(secondaryApp);
+
+        const credential = await createUserWithEmailAndPassword(secondaryAuth, email, password);
+        const newUid = credential.user.uid;
+
+        // Déconnecter l'instance secondaire immédiatement
+        await signOut(secondaryAuth);
+
+        // Créer le document Firestore avec l'UID Auth
+        userData.uid = newUid;
+        await setDoc(doc(db, 'users', newUid), userData);
+        selectedUserId = newUid;
+        showToast('Utilisateur créé avec succès', 'success');
       }
 
       close();
@@ -4493,534 +4533,6 @@ function openUserModal(userId) {
   });
 }
 
-
-/* ═══════════════════════════════════════════════════════════
-   SECTION FINANCES — Fonctions HTML et événements
-═══════════════════════════════════════════════════════════ */
-
-function getFinancesHTML() {
-  return `
-    <div class="page-header">
-      <div class="header-left">
-        <h1 class="page-title"><i class="fa-solid fa-coins"></i> Finances</h1>
-        <span class="page-subtitle">Pilotage financier et trésorerie</span>
-      </div>
-      <div class="header-actions">
-        <select id="finances-period" class="filter-select">
-          <option value="month">Mois en cours</option>
-          <option value="quarter">Trimestre</option>
-          <option value="year">Année</option>
-        </select>
-      </div>
-    </div>
-
-    <div class="finances-tabs">
-      <button class="finances-tab active" data-tab="overview"><i class="fa-solid fa-chart-pie"></i> Vue d'ensemble</button>
-      <button class="finances-tab" data-tab="invoices"><i class="fa-solid fa-file-invoice-dollar"></i> Facturation</button>
-      <button class="finances-tab" data-tab="budget"><i class="fa-solid fa-bullseye"></i> Budget</button>
-      <button class="finances-tab" data-tab="reports"><i class="fa-solid fa-file-contract"></i> Rapports</button>
-    </div>
-
-    <div id="finances-tab-content" class="finances-tab-content">
-      <!-- Content injected here -->
-    </div>
-  `;
-}
-
-function getFinancesOverviewHTML() {
-  const m = financesState.metrics;
-  const budgetUsed = m.budgetTotal > 0 ? (m.depensesEngagees / m.budgetTotal * 100).toFixed(1) : 0;
-  const budgetRemaining = m.budgetTotal - m.depensesEngagees;
-
-  const alerts = [];
-  if (budgetUsed > 90) alerts.push({ type: 'danger', message: `Budget à ${budgetUsed}% épuisé` });
-  if (m.margeNette < 10) alerts.push({ type: 'warning', message: 'Marge nette faible' });
-  if (m.delaiPaiementMoyen > 45) alerts.push({ type: 'warning', message: 'Délai de paiement élevé' });
-
-  return `
-    <div class="finances-overview">
-      <div class="finances-kpi-grid">
-        <div class="kpi-card ca">
-          <div class="kpi-icon"><i class="fa-solid fa-euro-sign"></i></div>
-          <div class="kpi-content">
-            <span class="kpi-label">CA du mois</span>
-            <span class="kpi-value">${formatCurrency(m.caMois)}</span>
-            <span class="kpi-sub">Trimestre: ${formatCurrency(m.caTrimestre)}</span>
-          </div>
-        </div>
-        <div class="kpi-card margin">
-          <div class="kpi-icon"><i class="fa-solid fa-percent"></i></div>
-          <div class="kpi-content">
-            <span class="kpi-label">Marge nette</span>
-            <span class="kpi-value">${m.margeNette.toFixed(1)}%</span>
-            <span class="kpi-sub">Brute: ${m.margeBrute.toFixed(1)}%</span>
-          </div>
-        </div>
-        <div class="kpi-card result">
-          <div class="kpi-icon"><i class="fa-solid fa-chart-line"></i></div>
-          <div class="kpi-content">
-            <span class="kpi-label">Résultat d'exploitation</span>
-            <span class="kpi-value ${m.resultatExploitation >= 0 ? 'positive' : 'negative'}">${formatCurrency(m.resultatExploitation)}</span>
-          </div>
-        </div>
-        <div class="kpi-card treasury">
-          <div class="kpi-icon"><i class="fa-solid fa-wallet"></i></div>
-          <div class="kpi-content">
-            <span class="kpi-label">Trésorerie</span>
-            <span class="kpi-value ${m.tresorerie >= 0 ? 'positive' : 'negative'}">${formatCurrency(m.tresorerie)}</span>
-            <span class="kpi-sub">Délai paiement: ${m.delaiPaiementMoyen.toFixed(0)}j</span>
-          </div>
-        </div>
-      </div>
-
-      ${alerts.length > 0 ? `
-        <div class="finances-alerts">
-          ${alerts.map(a => `
-            <div class="alert alert-${a.type}">
-              <i class="fa-solid ${a.type === 'danger' ? 'fa-triangle-exclamation' : 'fa-circle-exclamation'}"></i>
-              <span>${a.message}</span>
-            </div>
-          `).join('')}
-        </div>
-      ` : ''}
-
-      <div class="finances-budget-card">
-        <div class="budget-header">
-          <h3><i class="fa-solid fa-bullseye"></i> Budget annuel</h3>
-          <span class="budget-period">${new Date().getFullYear()}</span>
-        </div>
-        <div class="budget-progress">
-          <div class="budget-bar">
-            <div class="budget-fill ${budgetUsed > 90 ? 'danger' : budgetUsed > 75 ? 'warning' : ''}" style="width: ${Math.min(budgetUsed, 100)}%"></div>
-          </div>
-          <div class="budget-stats">
-            <span class="budget-used">Utilisé: <strong>${formatCurrency(m.depensesEngagees)}</strong> (${budgetUsed}%)</span>
-            <span class="budget-remaining ${budgetRemaining < 0 ? 'negative' : ''}">Restant: <strong>${formatCurrency(budgetRemaining)}</strong></span>
-          </div>
-        </div>
-      </div>
-
-      <div class="finances-charts-grid">
-        <div class="chart-card">
-          <div class="chart-header">
-            <h4>Évolution du CA</h4>
-          </div>
-          <div class="chart-container" id="revenue-chart-container">
-            ${renderFallbackRevenueChart()}
-          </div>
-        </div>
-        <div class="chart-card">
-          <div class="chart-header">
-            <h4>Répartition des dépenses</h4>
-          </div>
-          <div class="chart-container" id="expenses-chart-container">
-            ${renderFallbackExpensesChart()}
-          </div>
-        </div>
-      </div>
-
-      <div class="finances-activity">
-        <h4><i class="fa-solid fa-clock-rotate-left"></i> Factures récentes</h4>
-        <div class="activity-list">
-          ${financesState.invoices.slice(0, 5).map(inv => `
-            <div class="activity-item ${inv.status}">
-              <div class="activity-icon">
-                <i class="fa-solid ${inv.status === 'paid' ? 'fa-check-circle' : inv.status === 'pending' ? 'fa-clock' : 'fa-file-invoice'}"></i>
-              </div>
-              <div class="activity-details">
-                <span class="activity-title">${escapeHtml(inv.clientName || 'Client')}</span>
-                <span class="activity-meta">${formatCurrency(inv.amount)} • ${formatDate(inv.date)}</span>
-              </div>
-              <span class="activity-status status-${inv.status}">${getInvoiceStatusLabel(inv.status)}</span>
-            </div>
-          `).join('') || '<p class="no-activity">Aucune facture récente</p>'}
-        </div>
-      </div>
-    </div>
-  `;
-}
-
-function renderFallbackRevenueChart() {
-  const data = financesState.chartData?.monthly || [];
-  const months = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sept', 'Oct', 'Nov', 'Déc'];
-  const max = Math.max(...data.map(d => d?.revenue || 0), 1);
-
-  if (data.length === 0) {
-    return '<p class="no-data">Aucune donnée disponible</p>';
-  }
-
-  return `
-    <div class="fallback-chart">
-      ${data.map((d, i) => `
-        <div class="chart-bar-wrapper">
-          <div class="chart-bar" style="height: ${((d?.revenue || 0) / max * 80 + 5)}%">
-            <span class="chart-tooltip">${formatCurrency(d?.revenue || 0)}</span>
-          </div>
-          <span class="chart-label">${months[i] || ''}</span>
-        </div>
-      `).join('')}
-    </div>
-  `;
-}
-
-function renderFallbackExpensesChart() {
-  const categories = financesState.budget.categories || {};
-  const entries = Object.entries(categories);
-  if (entries.length === 0) return '<p class="no-data">Aucune donnée</p>';
-
-  const colors = ['#4f46e5', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
-  const total = entries.reduce((sum, [, cat]) => sum + (cat.spent || 0), 0);
-
-  return `
-    <div class="fallback-doughnut">
-      <div class="doughnut-legend">
-        ${entries.map(([key, cat], i) => `
-          <div class="legend-item">
-            <span class="legend-color" style="background: ${colors[i % colors.length]}"></span>
-            <span class="legend-label">${escapeHtml(cat.name || key)}</span>
-            <span class="legend-value">${formatCurrency(cat.spent || 0)} (${total > 0 ? ((cat.spent || 0) / total * 100).toFixed(0) : 0}%)</span>
-          </div>
-        `).join('')}
-      </div>
-    </div>
-  `;
-}
-
-function getFinancesInvoicesHTML() {
-  const filtered = getFilteredInvoices();
-  const totalAmount = filtered.reduce((sum, inv) => sum + (inv.amount || 0), 0);
-  const paidAmount = filtered.filter(i => i.status === 'paid').reduce((sum, inv) => sum + (inv.amount || 0), 0);
-  const pendingAmount = filtered.filter(i => i.status === 'pending').reduce((sum, inv) => sum + (inv.amount || 0), 0);
-
-  return `
-    <div class="finances-invoices">
-      <div class="invoices-stats">
-        <div class="stat-card">
-          <span class="stat-value">${formatCurrency(totalAmount)}</span>
-          <span class="stat-label">Total facturé</span>
-        </div>
-        <div class="stat-card success">
-          <span class="stat-value">${formatCurrency(paidAmount)}</span>
-          <span class="stat-label">Encaissé</span>
-        </div>
-        <div class="stat-card warning">
-          <span class="stat-value">${formatCurrency(pendingAmount)}</span>
-          <span class="stat-label">En attente</span>
-        </div>
-        <div class="stat-card">
-          <span class="stat-value">${filtered.filter(i => i.status === 'pending').length}</span>
-          <span class="stat-label">Factures en attente</span>
-        </div>
-      </div>
-
-      <div class="invoices-filters">
-        <div class="filter-group">
-          <input type="text" id="invoice-search" placeholder="Rechercher un client..." class="filter-input">
-          <select id="invoice-status-filter" class="filter-select">
-            <option value="all">Tous les statuts</option>
-            <option value="paid">Payée</option>
-            <option value="pending">En attente</option>
-            <option value="draft">Brouillon</option>
-            <option value="overdue">En retard</option>
-          </select>
-        </div>
-        <button class="btn-primary-sm" id="btn-new-invoice">
-          <i class="fa-solid fa-plus"></i> Nouvelle facture
-        </button>
-      </div>
-
-      <div class="invoices-table-container">
-        <table class="invoices-table">
-          <thead>
-            <tr>
-              <th>N° Facture</th>
-              <th>Client</th>
-              <th>Date</th>
-              <th>Échéance</th>
-              <th>Montant</th>
-              <th>Statut</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${filtered.map(inv => `
-              <tr data-id="${inv.id}">
-                <td><span class="invoice-num">${inv.number || '-'}</span></td>
-                <td>${escapeHtml(inv.clientName || '-')}</td>
-                <td>${formatDate(inv.date)}</td>
-                <td>${formatDate(inv.dueDate)}</td>
-                <td class="amount">${formatCurrency(inv.amount)}</td>
-                <td><span class="invoice-status-badge ${inv.status}">${getInvoiceStatusLabel(inv.status)}</span></td>
-                <td>
-                  <button class="btn-icon" title="Voir" onclick="viewInvoice('${inv.id}')"><i class="fa-solid fa-eye"></i></button>
-                  <button class="btn-icon" title="Télécharger PDF" onclick="downloadInvoice('${inv.id}')"><i class="fa-solid fa-download"></i></button>
-                  ${inv.status !== 'paid' ? `<button class="btn-icon" title="Marquer payée" onclick="markInvoicePaid('${inv.id}')"><i class="fa-solid fa-check"></i></button>` : ''}
-                </td>
-              </tr>
-            `).join('') || '<tr><td colspan="7" class="no-data">Aucune facture</td></tr>'}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  `;
-}
-
-function getFinancesBudgetHTML() {
-  const b = financesState.budget;
-  const categories = b.categories || {};
-  const totalBudget = Object.values(categories).reduce((sum, cat) => sum + (cat.budget || 0), 0);
-  const totalSpent = Object.values(categories).reduce((sum, cat) => sum + (cat.spent || 0), 0);
-
-  return `
-    <div class="finances-budget">
-      <div class="budget-overview-card">
-        <div class="budget-overview-header">
-          <h3>Budget ${new Date().getFullYear()}</h3>
-          <button class="btn-secondary-sm" id="btn-edit-budget"><i class="fa-solid fa-pen"></i> Modifier</button>
-        </div>
-        <div class="budget-overview-stats">
-          <div class="budget-stat">
-            <span class="stat-label">Budget total</span>
-            <span class="stat-value">${formatCurrency(totalBudget)}</span>
-          </div>
-          <div class="budget-stat">
-            <span class="stat-label">Dépensé</span>
-            <span class="stat-value ${totalSpent > totalBudget ? 'negative' : ''}">${formatCurrency(totalSpent)}</span>
-          </div>
-          <div class="budget-stat">
-            <span class="stat-label">Restant</span>
-            <span class="stat-value ${totalBudget - totalSpent < 0 ? 'negative' : 'positive'}">${formatCurrency(totalBudget - totalSpent)}</span>
-          </div>
-          <div class="budget-stat">
-            <span class="stat-label">Utilisation</span>
-            <span class="stat-value">${totalBudget > 0 ? ((totalSpent / totalBudget) * 100).toFixed(1) : 0}%</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="budget-categories">
-        <h4>Répartition par catégorie</h4>
-        <div class="budget-categories-grid">
-          ${Object.entries(categories).map(([key, cat]) => {
-            const percent = cat.budget > 0 ? ((cat.spent || 0) / cat.budget * 100) : 0;
-            const isOver = percent > 100;
-            return `
-              <div class="budget-category-card ${isOver ? 'over' : percent > 80 ? 'warning' : ''}">
-                <div class="category-header">
-                  <span class="category-name">${escapeHtml(cat.name || key)}</span>
-                  <span class="category-percent">${percent.toFixed(0)}%</span>
-                </div>
-                <div class="category-bar">
-                  <div class="category-fill ${isOver ? 'over' : percent > 80 ? 'warning' : ''}" style="width: ${Math.min(percent, 100)}%"></div>
-                </div>
-                <div class="category-stats">
-                  <span class="spent">${formatCurrency(cat.spent || 0)} / ${formatCurrency(cat.budget || 0)}</span>
-                  <span class="remaining ${cat.budget - (cat.spent || 0) < 0 ? 'negative' : ''}">${formatCurrency((cat.budget || 0) - (cat.spent || 0))}</span>
-                </div>
-                ${isOver ? `<div class="category-alert"><i class="fa-solid fa-triangle-exclamation"></i> Dépassement de budget</div>` : ''}
-              </div>
-            `;
-          }).join('') || '<p class="no-data">Aucune catégorie définie</p>'}
-        </div>
-      </div>
-
-      <div class="budget-expenses">
-        <h4>Dernières dépenses</h4>
-        <div class="expenses-list">
-          ${financesState.expenses.slice(0, 10).map(exp => `
-            <div class="expense-item">
-              <div class="expense-info">
-                <span class="expense-title">${escapeHtml(exp.description || 'Dépense')}</span>
-                <span class="expense-category">${escapeHtml(exp.category || '-')}</span>
-              </div>
-              <div class="expense-meta">
-                <span class="expense-amount">${formatCurrency(exp.amount)}</span>
-                <span class="expense-date">${formatDate(exp.date)}</span>
-              </div>
-            </div>
-          `).join('') || '<p class="no-data">Aucune dépense enregistrée</p>'}
-        </div>
-      </div>
-    </div>
-  `;
-}
-
-function getFinancesReportsHTML() {
-  return `
-    <div class="finances-reports">
-      <div class="reports-grid">
-        <div class="report-card">
-          <div class="report-icon"><i class="fa-solid fa-file-pdf"></i></div>
-          <div class="report-info">
-            <h4>Rapport mensuel</h4>
-            <p>CA, marges, résultat d'exploitation</p>
-            <span class="report-period">${new Date().toLocaleString('fr-FR', { month: 'long', year: 'numeric' })}</span>
-          </div>
-          <button class="btn-primary-sm" onclick="generateReport('monthly')">
-            <i class="fa-solid fa-download"></i> PDF
-          </button>
-        </div>
-
-        <div class="report-card">
-          <div class="report-icon"><i class="fa-solid fa-file-invoice-dollar"></i></div>
-          <div class="report-info">
-            <h4>Rapport trimestriel</h4>
-            <p>Analyse détaillée du trimestre en cours</p>
-            <span class="report-period">T${Math.ceil((new Date().getMonth() + 1) / 3)} ${new Date().getFullYear()}</span>
-          </div>
-          <button class="btn-primary-sm" onclick="generateReport('quarterly')">
-            <i class="fa-solid fa-download"></i> PDF
-          </button>
-        </div>
-
-        <div class="report-card">
-          <div class="report-icon"><i class="fa-solid fa-chart-column"></i></div>
-          <div class="report-info">
-            <h4>Rapport annuel</h4>
-            <p>Bilan complet de l'exercice</p>
-            <span class="report-period">${new Date().getFullYear()}</span>
-          </div>
-          <button class="btn-primary-sm" onclick="generateReport('annual')">
-            <i class="fa-solid fa-download"></i> PDF
-          </button>
-        </div>
-
-        <div class="report-card">
-          <div class="report-icon"><i class="fa-solid fa-file-csv"></i></div>
-          <div class="report-info">
-            <h4>Export comptable</h4>
-            <p>Écritures et balance</p>
-            <span class="report-period">CSV / Excel</span>
-          </div>
-          <button class="btn-primary-sm" onclick="exportAccounting()">
-            <i class="fa-solid fa-download"></i> Exporter
-          </button>
-        </div>
-      </div>
-
-      <div class="reports-comparison">
-        <h4><i class="fa-solid fa-scale-balanced"></i> Comparaison périodes</h4>
-        <div class="comparison-controls">
-          <select id="compare-period-1" class="filter-select">
-            <option value="current-month">Mois en cours</option>
-            <option value="last-month">Mois dernier</option>
-            <option value="current-quarter">Trimestre en cours</option>
-            <option value="last-quarter">Trimestre dernier</option>
-          </select>
-          <span>vs</span>
-          <select id="compare-period-2" class="filter-select">
-            <option value="last-month" selected>Mois dernier</option>
-            <option value="current-month">Mois en cours</option>
-            <option value="last-quarter">Trimestre dernier</option>
-            <option value="current-quarter">Trimestre en cours</option>
-          </select>
-          <button class="btn-secondary-sm" onclick="comparePeriods()">Comparer</button>
-        </div>
-        <div id="comparison-results" class="comparison-results"></div>
-      </div>
-    </div>
-  `;
-}
-
-function initFinances() {
-  document.querySelectorAll('.finances-tab').forEach(tab => {
-    tab.addEventListener('click', () => {
-      document.querySelectorAll('.finances-tab').forEach(t => t.classList.remove('active'));
-      tab.classList.add('active');
-      renderFinancesContent();
-    });
-  });
-
-  document.getElementById('finances-period')?.addEventListener('change', (e) => {
-    financesState.currentPeriod = e.target.value;
-    loadFinancesData(true);
-  });
-
-  renderFinancesContent();
-}
-
-function initInvoicesEvents() {
-  document.getElementById('invoice-search')?.addEventListener('input', debounce(() => {
-    renderFinancesContent();
-  }, 300));
-
-  document.getElementById('invoice-status-filter')?.addEventListener('change', () => {
-    renderFinancesContent();
-  });
-
-  document.getElementById('btn-new-invoice')?.addEventListener('click', () => {
-    showToast('Création de facture - fonctionnalité à venir', 'info');
-  });
-}
-
-function initBudgetEvents() {
-  document.getElementById('btn-edit-budget')?.addEventListener('click', () => {
-    showToast('Édition du budget - fonctionnalité à venir', 'info');
-  });
-}
-
-function initReportsEvents() {
-  // Handled by inline onclick
-}
-
-function getFilteredInvoices() {
-  let filtered = [...financesState.invoices];
-  const search = document.getElementById('invoice-search')?.value?.toLowerCase() || '';
-  const status = document.getElementById('invoice-status-filter')?.value || 'all';
-
-  if (search) {
-    filtered = filtered.filter(inv =>
-      (inv.clientName || '').toLowerCase().includes(search) ||
-      (inv.number || '').toLowerCase().includes(search)
-    );
-  }
-
-  if (status !== 'all') {
-    filtered = filtered.filter(inv => inv.status === status);
-  }
-
-  return filtered;
-}
-
-function getInvoiceStatusLabel(status) {
-  const labels = { paid: 'Payée', pending: 'En attente', draft: 'Brouillon', overdue: 'En retard' };
-  return labels[status] || status;
-}
-
-function formatCurrency(amount) {
-  return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(amount || 0);
-}
-
-async function viewInvoice(id) {
-  showToast('Visualisation de la facture - fonctionnalité à venir', 'info');
-}
-
-async function downloadInvoice(id) {
-  showToast('Téléchargement PDF - fonctionnalité à venir', 'info');
-}
-
-async function markInvoicePaid(id) {
-  try {
-    await updateDoc(doc(db, 'invoices', id), { status: 'paid', paidDate: new Date().toISOString() });
-    invalidateCache('finances');
-    await loadFinancesData(true);
-    showToast('Facture marquée comme payée', 'success');
-  } catch (err) {
-    showToast('Erreur lors de la mise à jour', 'error');
-  }
-}
-
-async function generateReport(type) {
-  showToast(`Génération du rapport ${type} - fonctionnalité à venir`, 'info');
-}
-
-async function exportAccounting() {
-  showToast('Export comptable - fonctionnalité à venir', 'info');
-}
-
-async function comparePeriods() {
-  showToast('Comparaison des périodes - fonctionnalité à venir', 'info');
-}
 
 /* ═══════════════════════════════════════════════════════════
    UTILITAIRE
