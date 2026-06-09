@@ -743,149 +743,397 @@ function getParametresHTML() {
         </div>
       </div>
 
-      <div class="settings-grid">
-        <!-- Profil -->
-        <div class="card col-8">
-          <div class="card-header">
-            <span class="card-title">Profil</span>
-            <button class="btn-ghost-sm" id="edit-profile-btn">
-              <i class="fa-solid fa-pen"></i> Modifier
-            </button>
-          </div>
-          <div class="settings-profile-section" id="profile-display">
-            <div class="profile-avatar-large">
-              <img src="https://ui-avatars.com/api/?name=U&background=4f46e5&color=fff&size=80" alt="Avatar" id="settings-avatar">
+      <div class="settings-layout">
+        <!-- Settings Sidebar -->
+        <div class="settings-sidebar">
+          <div class="settings-nav-list">
+            <div class="settings-nav-item active" data-tab="profile">
+              <i class="fa-solid fa-user"></i>
+              <span>Profil</span>
             </div>
-            <div class="profile-info">
-              <div class="profile-name" id="settings-name">—</div>
-              <div class="profile-email" id="settings-email">—</div>
-              <div class="profile-role" id="settings-role">—</div>
+            <div class="settings-nav-item" data-tab="preferences">
+              <i class="fa-solid fa-sliders"></i>
+              <span>Préférences</span>
             </div>
-          </div>
-          <div class="settings-profile-form" id="profile-form" style="display:none;">
-            <div class="form-group">
-              <label>Nom complet</label>
-              <input type="text" id="profile-name-input" placeholder="Prénom Nom">
+            <div class="settings-nav-item" data-tab="notifications">
+              <i class="fa-solid fa-bell"></i>
+              <span>Notifications</span>
             </div>
-            <div class="form-group">
-              <label>Avatar (URL)</label>
-              <input type="text" id="profile-avatar-input" placeholder="https://...">
+            <div class="settings-nav-item" data-tab="security">
+              <i class="fa-solid fa-shield-halved"></i>
+              <span>Sécurité</span>
             </div>
-            <div class="form-actions">
-              <button class="btn-ghost" id="cancel-profile-btn">Annuler</button>
-              <button class="btn-primary-sm" id="save-profile-btn">
-                <i class="fa-solid fa-check"></i> Enregistrer
-              </button>
+            <div class="settings-nav-item" data-tab="appearance">
+              <i class="fa-solid fa-palette"></i>
+              <span>Apparence</span>
             </div>
           </div>
         </div>
 
-        <!-- Statut de présence -->
-        <div class="card col-4">
-          <div class="card-header">
-            <span class="card-title">Statut de présence</span>
-          </div>
-          <div class="settings-presence">
-            <div class="presence-current">
-              <span class="presence-dot" id="settings-presence-dot"></span>
-              <span class="presence-label" id="settings-presence-label">—</span>
+        <!-- Settings Content -->
+        <div class="settings-content">
+          <!-- Tab: Profile -->
+          <div class="settings-tab active" id="tab-profile">
+            <div class="settings-section">
+              <h3 class="settings-section-title">Informations personnelles</h3>
+              <div class="profile-card">
+                <div class="profile-avatar-section">
+                  <div class="profile-avatar-large">
+                    <img src="https://ui-avatars.com/api/?name=U&background=4f46e5&color=fff&size=100" alt="Avatar" id="settings-avatar">
+                    <button class="avatar-edit-btn" id="avatar-edit-btn">
+                      <i class="fa-solid fa-camera"></i>
+                    </button>
+                  </div>
+                  <div class="profile-info-main">
+                    <div class="profile-name" id="settings-name">—</div>
+                    <div class="profile-email" id="settings-email">—</div>
+                    <div class="profile-role" id="settings-role">—</div>
+                  </div>
+                </div>
+                <div class="profile-form">
+                  <div class="form-row">
+                    <div class="form-group">
+                      <label>Prénom</label>
+                      <input type="text" id="profile-firstname" placeholder="Prénom">
+                    </div>
+                    <div class="form-group">
+                      <label>Nom</label>
+                      <input type="text" id="profile-lastname" placeholder="Nom">
+                    </div>
+                  </div>
+                  <div class="form-group">
+                    <label>Email professionnel</label>
+                    <input type="email" id="profile-email-input" placeholder="email@entreprise.com" disabled>
+                    <span class="form-hint">L'email ne peut pas être modifié</span>
+                  </div>
+                  <div class="form-group">
+                    <label>Téléphone</label>
+                    <input type="tel" id="profile-phone" placeholder="+33 6 12 34 56 78">
+                  </div>
+                  <div class="form-group">
+                    <label>Fonction / Poste</label>
+                    <input type="text" id="profile-job" placeholder="ex: Chef de projet">
+                  </div>
+                  <div class="form-group">
+                    <label>Biographie</label>
+                    <textarea id="profile-bio" rows="3" placeholder="Une courte description de vous..."></textarea>
+                  </div>
+                  <div class="form-actions">
+                    <button class="btn-primary" id="save-profile-btn">
+                      <i class="fa-solid fa-check"></i> Enregistrer les modifications
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div class="presence-options">
-              <button class="presence-option-btn" data-status="disponible">
-                <span class="presence-dot" style="background:#10b981;"></span>
-                Disponible
-              </button>
-              <button class="presence-option-btn" data-status="en_pause">
-                <span class="presence-dot" style="background:#f59e0b;"></span>
-                En pause
-              </button>
-              <button class="presence-option-btn" data-status="indisponible">
-                <span class="presence-dot" style="background:#ef4444;"></span>
-                Indisponible
-              </button>
-            </div>
-          </div>
-        </div>
 
-        <!-- Notifications -->
-        <div class="card col-6">
-          <div class="card-header">
-            <span class="card-title">Notifications</span>
-          </div>
-          <div class="settings-notifications">
-            <div class="setting-item">
-              <div class="setting-info">
-                <div class="setting-label">Notifications par email</div>
-                <div class="setting-desc">Recevoir les notifications importantes par email</div>
+            <div class="settings-section">
+              <h3 class="settings-section-title">Statut de présence</h3>
+              <div class="presence-card">
+                <div class="presence-current-large">
+                  <span class="presence-dot-large" id="settings-presence-dot"></span>
+                  <div class="presence-info">
+                    <div class="presence-label-large" id="settings-presence-label">—</div>
+                    <div class="presence-sublabel">Votre statut actuel</div>
+                  </div>
+                </div>
+                <div class="presence-options-grid">
+                  <button class="presence-option-btn" data-status="disponible">
+                    <span class="presence-dot" style="background:#10b981;"></span>
+                    <div class="presence-option-info">
+                      <div class="presence-option-label">Disponible</div>
+                      <div class="presence-option-desc">Prêt à travailler</div>
+                    </div>
+                  </button>
+                  <button class="presence-option-btn" data-status="en_pause">
+                    <span class="presence-dot" style="background:#f59e0b;"></span>
+                    <div class="presence-option-info">
+                      <div class="presence-option-label">En pause</div>
+                      <div class="presence-option-desc">De retour bientôt</div>
+                    </div>
+                  </button>
+                  <button class="presence-option-btn" data-status="indisponible">
+                    <span class="presence-dot" style="background:#ef4444;"></span>
+                    <div class="presence-option-info">
+                      <div class="presence-option-label">Indisponible</div>
+                      <div class="presence-option-desc">Ne pas déranger</div>
+                    </div>
+                  </button>
+                </div>
               </div>
-              <label class="toggle-switch">
-                <input type="checkbox" id="notif-email" checked>
-                <span class="toggle-slider"></span>
-              </label>
-            </div>
-            <div class="setting-item">
-              <div class="setting-info">
-                <div class="setting-label">Rappels de tâches</div>
-                <div class="setting-desc">Être notifié des tâches urgentes</div>
-              </div>
-              <label class="toggle-switch">
-                <input type="checkbox" id="notif-tasks" checked>
-                <span class="toggle-slider"></span>
-              </label>
-            </div>
-            <div class="setting-item">
-              <div class="setting-info">
-                <div class="setting-label">Rappels de rendez-vous</div>
-                <div class="setting-desc">Être notifié des rendez-vous à venir</div>
-              </div>
-              <label class="toggle-switch">
-                <input type="checkbox" id="notif-rdv" checked>
-                <span class="toggle-slider"></span>
-              </label>
-            </div>
-            <div class="setting-item">
-              <div class="setting-info">
-                <div class="setting-label">Mises à jour de projets</div>
-                <div class="setting-desc">Être notifié des changements sur les projets</div>
-              </div>
-              <label class="toggle-switch">
-                <input type="checkbox" id="notif-projects" checked>
-                <span class="toggle-slider"></span>
-              </label>
             </div>
           </div>
-        </div>
 
-        <!-- Sécurité -->
-        <div class="card col-6">
-          <div class="card-header">
-            <span class="card-title">Sécurité</span>
-          </div>
-          <div class="settings-security">
-            <div class="setting-item">
-              <div class="setting-info">
-                <div class="setting-label">Changer le mot de passe</div>
-                <div class="setting-desc">Mettre à jour votre mot de passe</div>
+          <!-- Tab: Preferences -->
+          <div class="settings-tab" id="tab-preferences" style="display:none;">
+            <div class="settings-section">
+              <h3 class="settings-section-title">Langue et région</h3>
+              <div class="settings-card">
+                <div class="setting-row">
+                  <div class="setting-info">
+                    <div class="setting-label">Langue</div>
+                    <div class="setting-desc">Langue de l'interface</div>
+                  </div>
+                  <select class="settings-select" id="language-select">
+                    <option value="fr" selected>Français</option>
+                    <option value="en">English</option>
+                    <option value="es">Español</option>
+                    <option value="de">Deutsch</option>
+                  </select>
+                </div>
+                <div class="setting-row">
+                  <div class="setting-info">
+                    <div class="setting-label">Format de date</div>
+                    <div class="setting-desc">Format d'affichage des dates</div>
+                  </div>
+                  <select class="settings-select" id="date-format-select">
+                    <option value="fr" selected>JJ/MM/AAAA</option>
+                    <option value="us">MM/JJ/AAAA</option>
+                    <option value="iso">AAAA-MM-JJ</option>
+                  </select>
+                </div>
+                <div class="setting-row">
+                  <div class="setting-info">
+                    <div class="setting-label">Fuseau horaire</div>
+                    <div class="setting-desc">Europe/Paris (UTC+1)</div>
+                  </div>
+                  <button class="btn-ghost-sm">Modifier</button>
+                </div>
               </div>
-              <button class="btn-ghost-sm" id="change-password-btn">
-                <i class="fa-solid fa-key"></i> Changer
-              </button>
             </div>
-            <div class="setting-item">
-              <div class="setting-info">
-                <div class="setting-label">Dernière connexion</div>
-                <div class="setting-desc" id="last-login">—</div>
-              </div>
-            </div>
-          </div>
-        </div>
 
-        <!-- Actions de compte -->
-        <div class="card col-12">
-          <div class="card-header">
-            <span class="card-title">Actions de compte</span>
+            <div class="settings-section">
+              <h3 class="settings-section-title">Paramètres de l'application</h3>
+              <div class="settings-card">
+                <div class="setting-row">
+                  <div class="setting-info">
+                    <div class="setting-label">Démarrage rapide</div>
+                    <div class="setting-desc">Ouvrir le dernier projet au démarrage</div>
+                  </div>
+                  <label class="toggle-switch">
+                    <input type="checkbox" id="pref-autostart" checked>
+                    <span class="toggle-slider"></span>
+                  </label>
+                </div>
+                <div class="setting-row">
+                  <div class="setting-info">
+                    <div class="setting-label">Son des notifications</div>
+                    <div class="setting-desc">Émettre un son lors des notifications</div>
+                  </div>
+                  <label class="toggle-switch">
+                    <input type="checkbox" id="pref-sound" checked>
+                    <span class="toggle-slider"></span>
+                  </label>
+                </div>
+                <div class="setting-row">
+                  <div class="setting-info">
+                    <div class="setting-label">Réduction automatique</div>
+                    <div class="setting-desc">Réduire dans la barre des tâches</div>
+                  </div>
+                  <label class="toggle-switch">
+                    <input type="checkbox" id="pref-minimize">
+                    <span class="toggle-slider"></span>
+                  </label>
+                </div>
+              </div>
+            </div>
           </div>
-          <div class="settings-account-actions">
+
+          <!-- Tab: Notifications -->
+          <div class="settings-tab" id="tab-notifications" style="display:none;">
+            <div class="settings-section">
+              <h3 class="settings-section-title">Notifications par email</h3>
+              <div class="settings-card">
+                <div class="setting-row">
+                  <div class="setting-info">
+                    <div class="setting-label">Notifications générales</div>
+                    <div class="setting-desc">Recevoir les notifications importantes</div>
+                  </div>
+                  <label class="toggle-switch">
+                    <input type="checkbox" id="notif-email" checked>
+                    <span class="toggle-slider"></span>
+                  </label>
+                </div>
+                <div class="setting-row">
+                  <div class="setting-info">
+                    <div class="setting-label">Mises à jour de projets</div>
+                    <div class="setting-desc">Notifications sur les projets suivis</div>
+                  </div>
+                  <label class="toggle-switch">
+                    <input type="checkbox" id="notif-projects" checked>
+                    <span class="toggle-slider"></span>
+                  </label>
+                </div>
+                <div class="setting-row">
+                  <div class="setting-info">
+                    <div class="setting-label">Rappels de tâches</div>
+                    <div class="setting-desc">Rappels pour les tâches à échéance</div>
+                  </div>
+                  <label class="toggle-switch">
+                    <input type="checkbox" id="notif-tasks" checked>
+                    <span class="toggle-slider"></span>
+                  </label>
+                </div>
+                <div class="setting-row">
+                  <div class="setting-info">
+                    <div class="setting-label">Rappels de rendez-vous</div>
+                    <div class="setting-desc">Notifications avant les rendez-vous</div>
+                  </div>
+                  <label class="toggle-switch">
+                    <input type="checkbox" id="notif-rdv" checked>
+                    <span class="toggle-slider"></span>
+                  </label>
+                </div>
+                <div class="setting-row">
+                  <div class="setting-info">
+                    <div class="setting-label">Mentions et commentaires</div>
+                    <div class="setting-desc">Quand quelqu'un vous mentionne</div>
+                  </div>
+                  <label class="toggle-switch">
+                    <input type="checkbox" id="notif-mentions" checked>
+                    <span class="toggle-slider"></span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <div class="settings-section">
+              <h3 class="settings-section-title">Notifications push</h3>
+              <div class="settings-card">
+                <div class="setting-row">
+                  <div class="setting-info">
+                    <div class="setting-label">Activer les notifications push</div>
+                    <div class="setting-desc">Recevoir des notifications sur le navigateur</div>
+                  </div>
+                  <label class="toggle-switch">
+                    <input type="checkbox" id="notif-push">
+                    <span class="toggle-slider"></span>
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab: Security -->
+          <div class="settings-tab" id="tab-security" style="display:none;">
+            <div class="settings-section">
+              <h3 class="settings-section-title">Mot de passe</h3>
+              <div class="settings-card">
+                <div class="password-form">
+                  <div class="form-group">
+                    <label>Mot de passe actuel</label>
+                    <input type="password" id="current-password" placeholder="••••••••">
+                  </div>
+                  <div class="form-group">
+                    <label>Nouveau mot de passe</label>
+                    <input type="password" id="new-password" placeholder="Min. 8 caractères">
+                    <div class="password-strength" id="password-strength">
+                      <div class="strength-bar"></div>
+                      <span class="strength-text">Force du mot de passe</span>
+                    </div>
+                  </div>
+                  <div class="form-group">
+                    <label>Confirmer le nouveau mot de passe</label>
+                    <input type="password" id="confirm-password" placeholder="••••••••">
+                  </div>
+                  <button class="btn-primary" id="change-password-btn">
+                    <i class="fa-solid fa-key"></i> Mettre à jour le mot de passe
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div class="settings-section">
+              <h3 class="settings-section-title">Sécurité du compte</h3>
+              <div class="settings-card">
+                <div class="setting-row">
+                  <div class="setting-info">
+                    <div class="setting-label">Authentification à deux facteurs (2FA)</div>
+                    <div class="setting-desc">Ajouter une couche de sécurité supplémentaire</div>
+                  </div>
+                  <button class="btn-ghost-sm" id="setup-2fa-btn">Configurer</button>
+                </div>
+                <div class="setting-row">
+                  <div class="setting-info">
+                    <div class="setting-label">Sessions actives</div>
+                    <div class="setting-desc" id="active-sessions">1 appareil connecté</div>
+                  </div>
+                  <button class="btn-ghost-sm" id="view-sessions-btn">Gérer</button>
+                </div>
+                <div class="setting-row">
+                  <div class="setting-info">
+                    <div class="setting-label">Historique de connexion</div>
+                    <div class="setting-desc" id="last-login">—</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="settings-section danger-zone">
+              <h3 class="settings-section-title">Zone de danger</h3>
+              <div class="settings-card danger">
+                <div class="danger-item">
+                  <div class="danger-info">
+                    <div class="danger-label">Supprimer le compte</div>
+                    <div class="danger-desc">Cette action est irréversible et supprimera toutes vos données</div>
+                  </div>
+                  <button class="btn-danger-outline" id="delete-account-btn">Supprimer</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab: Appearance -->
+          <div class="settings-tab" id="tab-appearance" style="display:none;">
+            <div class="settings-section">
+              <h3 class="settings-section-title">Thème</h3>
+              <div class="theme-options">
+                <div class="theme-option active" data-theme="light">
+                  <div class="theme-preview light"></div>
+                  <span>Clair</span>
+                </div>
+                <div class="theme-option" data-theme="dark">
+                  <div class="theme-preview dark"></div>
+                  <span>Sombre</span>
+                </div>
+                <div class="theme-option" data-theme="auto">
+                  <div class="theme-preview auto"></div>
+                  <span>Automatique</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="settings-section">
+              <h3 class="settings-section-title">Affichage</h3>
+              <div class="settings-card">
+                <div class="setting-row">
+                  <div class="setting-info">
+                    <div class="setting-label">Densité de l'interface</div>
+                    <div class="setting-desc">Espacement entre les éléments</div>
+                  </div>
+                  <select class="settings-select" id="density-select">
+                    <option value="compact">Compacte</option>
+                    <option value="normal" selected>Normale</option>
+                    <option value="comfortable">Confortable</option>
+                  </select>
+                </div>
+                <div class="setting-row">
+                  <div class="setting-info">
+                    <div class="setting-label">Animations</div>
+                    <div class="setting-desc">Activer les animations de l'interface</div>
+                  </div>
+                  <label class="toggle-switch">
+                    <input type="checkbox" id="pref-animations" checked>
+                    <span class="toggle-slider"></span>
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Footer Actions -->
+          <div class="settings-footer">
+            <button class="btn-ghost" id="settings-cancel-btn">Annuler</button>
             <button class="btn-danger" id="signout-btn">
               <i class="fa-solid fa-right-from-bracket"></i> Se déconnecter
             </button>
@@ -905,59 +1153,85 @@ async function loadParametresData(uid) {
   if (!uid) return;
 
   try {
-    // Charger le profil utilisateur
     const snap = await getDoc(doc(db, 'users', uid));
     if (snap.exists()) {
       const profile = snap.data();
 
-      // Mettre à jour l'affichage du profil
+      // Profile display
       const nameEl = document.getElementById('settings-name');
       const emailEl = document.getElementById('settings-email');
       const roleEl = document.getElementById('settings-role');
       const avatarEl = document.getElementById('settings-avatar');
       const headerAvatar = document.getElementById('header-avatar');
 
-      if (nameEl && profile.displayName) {
-        nameEl.textContent = profile.displayName;
-      }
-      if (emailEl && profile.email) {
-        emailEl.textContent = profile.email;
-      }
-      if (roleEl) {
-        roleEl.textContent = profile.role === 'admin' ? 'Administrateur' : 'Employé';
-      }
-      if (avatarEl) {
-        avatarEl.src = profile.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(profile.displayName || 'U')}&background=4f46e5&color=fff&size=80`;
-      }
-      if (headerAvatar) {
-        headerAvatar.src = profile.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(profile.displayName || 'U')}&background=4f46e5&color=fff&size=32`;
-      }
+      if (nameEl && profile.displayName) nameEl.textContent = profile.displayName;
+      if (emailEl && profile.email) emailEl.textContent = profile.email;
+      if (roleEl) roleEl.textContent = profile.role === 'admin' ? 'Administrateur' : 'Employé';
 
-      // Charger les préférences de notification
+      const avatarUrl = profile.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(profile.displayName || 'U')}&background=4f46e5&color=fff&size=100`;
+      if (avatarEl) avatarEl.src = avatarUrl;
+      if (headerAvatar) headerAvatar.src = profile.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(profile.displayName || 'U')}&background=4f46e5&color=fff&size=32`;
+
+      // Profile form fields
+      if (profile.displayName) {
+        const parts = profile.displayName.split(' ');
+        const firstNameInput = document.getElementById('profile-firstname');
+        const lastNameInput = document.getElementById('profile-lastname');
+        if (firstNameInput) firstNameInput.value = parts[0] || '';
+        if (lastNameInput) lastNameInput.value = parts.slice(1).join(' ') || '';
+      }
+      const emailInput = document.getElementById('profile-email-input');
+      const phoneInput = document.getElementById('profile-phone');
+      const jobInput = document.getElementById('profile-job');
+      const bioInput = document.getElementById('profile-bio');
+
+      if (emailInput && profile.email) emailInput.value = profile.email;
+      if (phoneInput && profile.phone) phoneInput.value = profile.phone;
+      if (jobInput && profile.jobTitle) jobInput.value = profile.jobTitle;
+      if (bioInput && profile.bio) bioInput.value = profile.bio;
+
+      // Notification preferences
       if (profile.preferences) {
-        const notifEmail = document.getElementById('notif-email');
-        const notifTasks = document.getElementById('notif-tasks');
-        const notifRdv = document.getElementById('notif-rdv');
-        const notifProjects = document.getElementById('notif-projects');
+        const prefs = profile.preferences;
+        const setToggle = (id, val) => {
+          const el = document.getElementById(id);
+          if (el) el.checked = val !== false;
+        };
+        setToggle('notif-email', prefs.email);
+        setToggle('notif-tasks', prefs.tasks);
+        setToggle('notif-rdv', prefs.rdv);
+        setToggle('notif-projects', prefs.projects);
+        setToggle('notif-mentions', prefs.mentions);
+        setToggle('notif-push', prefs.push);
+        setToggle('pref-autostart', prefs.autostart);
+        setToggle('pref-sound', prefs.sound);
+        setToggle('pref-minimize', prefs.minimize);
+        setToggle('pref-animations', prefs.animations);
+      }
 
-        if (notifEmail) notifEmail.checked = profile.preferences.email !== false;
-        if (notifTasks) notifTasks.checked = profile.preferences.tasks !== false;
-        if (notifRdv) notifRdv.checked = profile.preferences.rdv !== false;
-        if (notifProjects) notifProjects.checked = profile.preferences.projects !== false;
+      // Language and date format
+      if (profile.language) {
+        const langSelect = document.getElementById('language-select');
+        if (langSelect) langSelect.value = profile.language;
+      }
+      if (profile.dateFormat) {
+        const dateSelect = document.getElementById('date-format-select');
+        if (dateSelect) dateSelect.value = profile.dateFormat;
+      }
+
+      // Last login
+      const lastLoginEl = document.getElementById('last-login');
+      if (lastLoginEl && profile.lastLogin) {
+        const date = profile.lastLogin.toDate ? profile.lastLogin.toDate() : new Date(profile.lastLogin);
+        lastLoginEl.textContent = date.toLocaleString('fr-FR');
       }
     }
 
-    // Charger le statut de présence
+    // Presence status
     const presenceSnap = await getDoc(doc(db, 'presence', uid));
     if (presenceSnap.exists()) {
       const { status } = presenceSnap.data();
       applySettingsPresenceUI(status);
-    }
-
-    // Afficher la dernière connexion (simulée pour l'instant)
-    const lastLoginEl = document.getElementById('last-login');
-    if (lastLoginEl) {
-      lastLoginEl.textContent = 'Aujourd\'hui à ' + new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
     }
   } catch (err) {
     console.warn('loadParametresData:', err);
@@ -972,75 +1246,107 @@ function applySettingsPresenceUI(status) {
 }
 
 function initParametres() {
-  // Bouton modifier le profil
-  const editProfileBtn = document.getElementById('edit-profile-btn');
-  const cancelProfileBtn = document.getElementById('cancel-profile-btn');
+  // Tab navigation
+  const settingsNavItems = document.querySelectorAll('.settings-nav-item');
+  const settingsTabs = document.querySelectorAll('.settings-tab');
+
+  settingsNavItems.forEach(item => {
+    item.addEventListener('click', () => {
+      const tabName = item.dataset.tab;
+
+      // Update nav items
+      settingsNavItems.forEach(nav => nav.classList.remove('active'));
+      item.classList.add('active');
+
+      // Update tabs
+      settingsTabs.forEach(tab => {
+        tab.style.display = tab.id === `tab-${tabName}` ? 'block' : 'none';
+        if (tab.id === `tab-${tabName}`) {
+          tab.classList.add('active');
+        } else {
+          tab.classList.remove('active');
+        }
+      });
+    });
+  });
+
+  // Save profile
   const saveProfileBtn = document.getElementById('save-profile-btn');
-  const profileDisplay = document.getElementById('profile-display');
-  const profileForm = document.getElementById('profile-form');
-
-  if (editProfileBtn) {
-    editProfileBtn.addEventListener('click', () => {
-      if (profileDisplay) profileDisplay.style.display = 'none';
-      if (profileForm) profileForm.style.display = 'block';
-
-      // Pré-remplir le formulaire
-      const nameInput = document.getElementById('profile-name-input');
-      const avatarInput = document.getElementById('profile-avatar-input');
-      const currentName = document.getElementById('settings-name');
-      const currentAvatar = document.getElementById('settings-avatar');
-
-      if (nameInput && currentName) nameInput.value = currentName.textContent;
-      if (avatarInput && currentAvatar) avatarInput.value = currentAvatar.src;
-    });
-  }
-
-  if (cancelProfileBtn) {
-    cancelProfileBtn.addEventListener('click', () => {
-      if (profileDisplay) profileDisplay.style.display = 'flex';
-      if (profileForm) profileForm.style.display = 'none';
-    });
-  }
-
   if (saveProfileBtn) {
     saveProfileBtn.addEventListener('click', async () => {
-      const nameInput = document.getElementById('profile-name-input');
-      const avatarInput = document.getElementById('profile-avatar-input');
+      const firstName = document.getElementById('profile-firstname')?.value.trim();
+      const lastName = document.getElementById('profile-lastname')?.value.trim();
+      const phone = document.getElementById('profile-phone')?.value.trim();
+      const job = document.getElementById('profile-job')?.value.trim();
+      const bio = document.getElementById('profile-bio')?.value.trim();
 
-      if (!nameInput || !nameInput.value.trim()) {
-        alert('Le nom est requis');
+      const displayName = `${firstName || ''} ${lastName || ''}`.trim();
+
+      if (!displayName) {
+        showToast('Le nom est requis', 'error');
         return;
       }
 
       try {
         await updateDoc(doc(db, 'users', currentUid), {
-          displayName: nameInput.value.trim(),
-          photoURL: avatarInput?.value.trim() || null,
+          displayName,
+          phone: phone || null,
+          jobTitle: job || null,
+          bio: bio || null,
           updatedAt: serverTimestamp()
         });
 
-        // Recharger les données
         await loadParametresData(currentUid);
 
-        // Revenir à l'affichage
-        if (profileDisplay) profileDisplay.style.display = 'flex';
-        if (profileForm) profileForm.style.display = 'none';
-
-        // Mettre à jour la sidebar
+        // Update sidebar
         const sidebarName = document.getElementById('user-name');
-        const sidebarAvatar = document.getElementById('user-avatar-img');
-        if (sidebarName) sidebarName.textContent = nameInput.value.trim();
-        if (sidebarAvatar && avatarInput?.value.trim()) {
-          sidebarAvatar.src = avatarInput.value.trim();
-        }
+        if (sidebarName) sidebarName.textContent = displayName;
+
+        showToast('Profil mis à jour avec succès', 'success');
       } catch (err) {
         console.error('Erreur lors de la sauvegarde du profil:', err);
-        alert('Erreur lors de la sauvegarde du profil');
+        showToast('Erreur lors de la sauvegarde du profil', 'error');
       }
     });
   }
 
-  // Options de présence
+  // Avatar edit button
+  const avatarEditBtn = document.getElementById('avatar-edit-btn');
+  if (avatarEditBtn) {
+    avatarEditBtn.addEventListener('click', () => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/*';
+      input.onchange = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        try {
+          const storageRef = ref(storage, `avatars/${currentUid}/${Date.now()}_${file.name}`);
+          const snapshot = await uploadBytes(storageRef, file);
+          const downloadURL = await getDownloadURL(snapshot.ref);
+
+          await updateDoc(doc(db, 'users', currentUid), {
+            photoURL: downloadURL,
+            updatedAt: serverTimestamp()
+          });
+
+          const avatarEl = document.getElementById('settings-avatar');
+          const sidebarAvatar = document.getElementById('user-avatar-img');
+          if (avatarEl) avatarEl.src = downloadURL;
+          if (sidebarAvatar) sidebarAvatar.src = downloadURL;
+
+          showToast('Photo de profil mise à jour', 'success');
+        } catch (err) {
+          console.error('Erreur lors de l\'upload:', err);
+          showToast('Erreur lors de l\'upload de l\'image', 'error');
+        }
+      };
+      input.click();
+    });
+  }
+
+  // Presence options
   document.querySelectorAll('.presence-option-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
       const status = btn.dataset.status;
@@ -1049,40 +1355,144 @@ function initParametres() {
     });
   });
 
-  // Notifications
-  const notifEmail = document.getElementById('notif-email');
-  const notifTasks = document.getElementById('notif-tasks');
-  const notifRdv = document.getElementById('notif-rdv');
-  const notifProjects = document.getElementById('notif-projects');
+  // Notification preferences - using debounced save
+  const notificationIds = ['notif-email', 'notif-tasks', 'notif-rdv', 'notif-projects', 'notif-mentions', 'notif-push'];
+  const saveNotifPrefs = debounce(async () => {
+    const prefs = {};
+    notificationIds.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) prefs[id.replace('notif-', '').replace('pref-', '')] = el.checked;
+    });
 
-  const saveNotificationPreferences = async () => {
     try {
       await updateDoc(doc(db, 'users', currentUid), {
-        'preferences.email': notifEmail?.checked,
-        'preferences.tasks': notifTasks?.checked,
-        'preferences.rdv': notifRdv?.checked,
-        'preferences.projects': notifProjects?.checked,
+        'preferences': { ...(await getDoc(doc(db, 'users', currentUid))).data()?.preferences, ...prefs },
         updatedAt: serverTimestamp()
       });
     } catch (err) {
       console.warn('Erreur lors de la sauvegarde des préférences:', err);
     }
+  }, 500);
+
+  notificationIds.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('change', saveNotifPrefs);
+  });
+
+  // Preferences toggles
+  const prefIds = ['pref-autostart', 'pref-sound', 'pref-minimize', 'pref-animations'];
+  const saveAppPrefs = debounce(async () => {
+    const prefs = {};
+    prefIds.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) prefs[id.replace('pref-', '')] = el.checked;
+    });
+
+    try {
+      await updateDoc(doc(db, 'users', currentUid), {
+        'preferences': { ...(await getDoc(doc(db, 'users', currentUid))).data()?.preferences, ...prefs },
+        updatedAt: serverTimestamp()
+      });
+    } catch (err) {
+      console.warn('Erreur lors de la sauvegarde des préférences:', err);
+    }
+  }, 500);
+
+  prefIds.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('change', saveAppPrefs);
+  });
+
+  // Language and date format
+  const languageSelect = document.getElementById('language-select');
+  const dateFormatSelect = document.getElementById('date-format-select');
+  const densitySelect = document.getElementById('density-select');
+
+  const saveSettings = async () => {
+    try {
+      const update = {};
+      if (languageSelect) update.language = languageSelect.value;
+      if (dateFormatSelect) update.dateFormat = dateFormatSelect.value;
+      if (densitySelect) update.density = densitySelect.value;
+
+      await updateDoc(doc(db, 'users', currentUid), {
+        ...update,
+        updatedAt: serverTimestamp()
+      });
+      showToast('Paramètres enregistrés', 'success');
+    } catch (err) {
+      console.warn('Erreur lors de la sauvegarde:', err);
+    }
   };
 
-  if (notifEmail) notifEmail.addEventListener('change', saveNotificationPreferences);
-  if (notifTasks) notifTasks.addEventListener('change', saveNotificationPreferences);
-  if (notifRdv) notifRdv.addEventListener('change', saveNotificationPreferences);
-  if (notifProjects) notifProjects.addEventListener('change', saveNotificationPreferences);
+  languageSelect?.addEventListener('change', saveSettings);
+  dateFormatSelect?.addEventListener('change', saveSettings);
+  densitySelect?.addEventListener('change', saveSettings);
 
-  // Bouton changer mot de passe
+  // Theme options
+  document.querySelectorAll('.theme-option').forEach(option => {
+    option.addEventListener('click', () => {
+      document.querySelectorAll('.theme-option').forEach(o => o.classList.remove('active'));
+      option.classList.add('active');
+      const theme = option.dataset.theme;
+      // Apply theme logic here
+      updateDoc(doc(db, 'users', currentUid), { theme, updatedAt: serverTimestamp() }).catch(console.warn);
+    });
+  });
+
+  // Change password button
   const changePasswordBtn = document.getElementById('change-password-btn');
   if (changePasswordBtn) {
-    changePasswordBtn.addEventListener('click', () => {
-      alert('La fonctionnalité de changement de mot de passe sera bientôt disponible.');
+    changePasswordBtn.addEventListener('click', async () => {
+      const currentPwd = document.getElementById('current-password')?.value;
+      const newPwd = document.getElementById('new-password')?.value;
+      const confirmPwd = document.getElementById('confirm-password')?.value;
+
+      if (!currentPwd || !newPwd || !confirmPwd) {
+        showToast('Veuillez remplir tous les champs', 'error');
+        return;
+      }
+
+      if (newPwd !== confirmPwd) {
+        showToast('Les mots de passe ne correspondent pas', 'error');
+        return;
+      }
+
+      if (newPwd.length < 8) {
+        showToast('Le mot de passe doit faire au moins 8 caractères', 'error');
+        return;
+      }
+
+      // Password change requires re-authentication, this is a placeholder
+      showToast('Fonctionnalité de changement de mot de passe à implémenter', 'warning');
     });
   }
 
-  // Bouton déconnexion
+  // 2FA setup button
+  document.getElementById('setup-2fa-btn')?.addEventListener('click', () => {
+    showToast('Configuration 2FA à implémenter', 'warning');
+  });
+
+  // View sessions button
+  document.getElementById('view-sessions-btn')?.addEventListener('click', () => {
+    showToast('Gestion des sessions à implémenter', 'warning');
+  });
+
+  // Delete account button
+  document.getElementById('delete-account-btn')?.addEventListener('click', async () => {
+    if (!confirm('Êtes-vous sûr de vouloir supprimer votre compte ? Cette action est irréversible.')) return;
+    if (!confirm('Cette action supprimera définitivement toutes vos données. Confirmer ?')) return;
+
+    showToast('Fonctionnalité de suppression de compte à implémenter', 'warning');
+  });
+
+  // Cancel button - reset form
+  document.getElementById('settings-cancel-btn')?.addEventListener('click', () => {
+    loadParametresData(currentUid);
+    showToast('Modifications annulées', 'info');
+  });
+
+  // Sign out button
   const signoutBtn = document.getElementById('signout-btn');
   if (signoutBtn) {
     signoutBtn.addEventListener('click', async () => {
@@ -1092,7 +1502,7 @@ function initParametres() {
           window.location.replace('operating-system.html');
         } catch (err) {
           console.error('Erreur lors de la déconnexion:', err);
-          alert('Erreur lors de la déconnexion');
+          showToast('Erreur lors de la déconnexion', 'error');
         }
       }
     });
@@ -1441,75 +1851,167 @@ function getDocumentsHTML() {
           <h1 class="page-title">Documents</h1>
           <p class="page-subtitle">Gérez vos fichiers et ressources</p>
         </div>
-        <button class="btn-primary-sm" id="upload-doc-btn">
-          <i class="fa-solid fa-cloud-arrow-up"></i> Téléverser
-        </button>
+        <div class="page-title-actions">
+          <input type="file" id="file-upload-input" multiple style="display:none;">
+          <button class="btn-ghost-sm" id="new-folder-btn">
+            <i class="fa-solid fa-folder-plus"></i> Nouveau dossier
+          </button>
+          <button class="btn-primary-sm" id="upload-doc-btn">
+            <i class="fa-solid fa-cloud-arrow-up"></i> Téléverser
+          </button>
+        </div>
       </div>
 
-      <div class="documents-grid">
-        <!-- Statistiques -->
-        <div class="card col-3">
-          <div class="card-header">
-            <span class="card-title">Statistiques</span>
-          </div>
-          <div class="docs-stats">
-            <div class="stat-item">
-              <span class="stat-value" id="docs-total">0</span>
-              <span class="stat-label">Documents</span>
+      <div class="documents-layout">
+        <!-- Sidebar Navigation -->
+        <div class="docs-sidebar">
+          <div class="docs-nav-section">
+            <div class="docs-nav-title">Emplacements</div>
+            <div class="docs-nav-list">
+              <div class="docs-nav-item active" data-folder="root">
+                <i class="fa-solid fa-house"></i>
+                <span>Accueil</span>
+                <span class="docs-nav-count" id="root-count">0</span>
+              </div>
+              <div class="docs-nav-item" data-folder="my-files">
+                <i class="fa-solid fa-user"></i>
+                <span>Mes fichiers</span>
+                <span class="docs-nav-count" id="my-files-count">0</span>
+              </div>
+              <div class="docs-nav-item" data-folder="shared">
+                <i class="fa-solid fa-share-nodes"></i>
+                <span>Partagés avec moi</span>
+                <span class="docs-nav-count" id="shared-count">0</span>
+              </div>
             </div>
-            <div class="stat-item">
-              <span class="stat-value" id="docs-size">0 MB</span>
-              <span class="stat-label">Espace utilisé</span>
+          </div>
+
+          <div class="docs-nav-section">
+            <div class="docs-nav-title">Types</div>
+            <div class="docs-nav-list">
+              <div class="docs-nav-item" data-type="images">
+                <i class="fa-solid fa-image" style="color:#3b82f6;"></i>
+                <span>Images</span>
+                <span class="docs-nav-count" id="images-count">0</span>
+              </div>
+              <div class="docs-nav-item" data-type="pdf">
+                <i class="fa-solid fa-file-pdf" style="color:#ef4444;"></i>
+                <span>PDF</span>
+                <span class="docs-nav-count" id="pdf-count">0</span>
+              </div>
+              <div class="docs-nav-item" data-type="documents">
+                <i class="fa-solid fa-file-word" style="color:#2563eb;"></i>
+                <span>Documents</span>
+                <span class="docs-nav-count" id="documents-count">0</span>
+              </div>
+              <div class="docs-nav-item" data-type="spreadsheets">
+                <i class="fa-solid fa-file-excel" style="color:#10b981;"></i>
+                <span>Tableurs</span>
+                <span class="docs-nav-count" id="spreadsheets-count">0</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="docs-storage-info">
+            <div class="storage-header">
+              <span>Stockage</span>
+              <span id="storage-used">0 MB / 1 GB</span>
+            </div>
+            <div class="storage-bar">
+              <div class="storage-progress" id="storage-progress" style="width: 0%;"></div>
             </div>
           </div>
         </div>
 
-        <!-- Dossiers récents -->
-        <div class="card col-5">
-          <div class="card-header">
-            <span class="card-title">Dossiers</span>
-            <button class="btn-ghost-sm" id="new-folder-btn">
-              <i class="fa-solid fa-folder-plus"></i> Nouveau
-            </button>
+        <!-- Main Content Area -->
+        <div class="docs-main">
+          <!-- Breadcrumb -->
+          <div class="docs-breadcrumb" id="docs-breadcrumb">
+            <span class="breadcrumb-item active">Documents</span>
           </div>
-          <div class="docs-folders" id="docs-folders">
-            <div class="empty-state">
-              <i class="fa-regular fa-folder"></i>
-              <p>Aucun dossier</p>
+
+          <!-- Toolbar -->
+          <div class="docs-toolbar">
+            <div class="docs-view-toggle">
+              <button class="view-btn active" data-view="grid" title="Vue grille">
+                <i class="fa-solid fa-border-all"></i>
+              </button>
+              <button class="view-btn" data-view="list" title="Vue liste">
+                <i class="fa-solid fa-list"></i>
+              </button>
             </div>
+            <div class="docs-sort">
+              <select id="docs-sort-select">
+                <option value="name">Nom</option>
+                <option value="date">Date de modification</option>
+                <option value="size">Taille</option>
+                <option value="type">Type</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Content Grid/List -->
+          <div class="docs-content" id="docs-content">
+            <div class="docs-empty-state" id="docs-empty-state">
+              <div class="empty-icon">
+                <i class="fa-regular fa-folder-open"></i>
+              </div>
+              <h3>Dossier vide</h3>
+              <p>Commencez par téléverser des fichiers ou créer un dossier</p>
+              <button class="btn-primary-sm" id="empty-upload-btn">
+                <i class="fa-solid fa-cloud-arrow-up"></i> Téléverser des fichiers
+              </button>
+            </div>
+            <div class="docs-grid" id="docs-grid" style="display:none;"></div>
+            <div class="docs-list-view" id="docs-list-view" style="display:none;"></div>
           </div>
         </div>
+      </div>
+    </div>
 
-        <!-- Fichiers récents -->
-        <div class="card col-4">
-          <div class="card-header">
-            <span class="card-title">Récents</span>
-          </div>
-          <div class="docs-recent" id="docs-recent">
-            <div class="empty-state">
-              <i class="fa-regular fa-file"></i>
-              <p>Aucun fichier récent</p>
-            </div>
+    <!-- Modal: New Folder -->
+    <div class="modal-overlay" id="folder-modal" style="display:none;">
+      <div class="modal">
+        <div class="modal-header">
+          <h3>Nouveau dossier</h3>
+          <button class="modal-close" id="folder-modal-close"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label>Nom du dossier</label>
+            <input type="text" id="folder-name-input" placeholder="Nouveau dossier">
           </div>
         </div>
+        <div class="modal-footer">
+          <button class="btn-ghost" id="folder-cancel-btn">Annuler</button>
+          <button class="btn-primary-sm" id="folder-create-btn">Créer</button>
+        </div>
+      </div>
+    </div>
 
-        <!-- Liste complète des documents -->
-        <div class="card col-12">
-          <div class="card-header">
-            <span class="card-title">Tous les documents</span>
-            <div class="card-filters">
-              <button class="filter-btn active" data-filter="all">Tous</button>
-              <button class="filter-btn" data-filter="images">Images</button>
-              <button class="filter-btn" data-filter="pdf">PDF</button>
-              <button class="filter-btn" data-filter="docs">Documents</button>
+    <!-- Modal: File Preview -->
+    <div class="modal-overlay" id="preview-modal" style="display:none;">
+      <div class="modal modal-large">
+        <div class="modal-header">
+          <h3 id="preview-filename">Fichier</h3>
+          <button class="modal-close" id="preview-modal-close"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="modal-body">
+          <div class="file-preview-area" id="file-preview-area">
+            <div class="preview-placeholder">
+              <i class="fa-solid fa-file"></i>
+              <p>L'aperçu n'est pas disponible pour ce type de fichier</p>
             </div>
           </div>
-          <div class="docs-list" id="docs-list">
-            <div class="empty-state">
-              <i class="fa-regular fa-folder-open"></i>
-              <p>Aucun document</p>
-            </div>
-          </div>
+          <div class="file-details" id="file-details"></div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-danger" id="file-delete-btn">
+            <i class="fa-solid fa-trash"></i> Supprimer
+          </button>
+          <button class="btn-primary-sm" id="file-download-btn">
+            <i class="fa-solid fa-download"></i> Télécharger
+          </button>
         </div>
       </div>
     </div>
@@ -1667,58 +2169,436 @@ function renderDocumentsList(documents) {
   }).join('');
 }
 
-function getFileIcon(type) {
-  const icons = {
-    'pdf': '<i class="fa-solid fa-file-pdf" style="color:#ef4444;"></i>',
-    'image': '<i class="fa-solid fa-file-image" style="color:#3b82f6;"></i>',
-    'word': '<i class="fa-solid fa-file-word" style="color:#2563eb;"></i>',
-    'excel': '<i class="fa-solid fa-file-excel" style="color:#10b981;"></i>',
-    'default': '<i class="fa-solid fa-file" style="color:#6b7280;"></i>'
-  };
-  return icons[type] || icons['default'];
+// Documents state management
+let docsState = {
+  documents: [],
+  folders: ['Mes documents', 'Projets', 'Clients', 'Templates', 'Archives'],
+  currentFolder: 'root',
+  currentFilter: 'all',
+  viewMode: 'grid',
+  sortBy: 'name',
+  searchQuery: '',
+  selectedFile: null
+};
+
+function getFileIcon(type, name, mimeType) {
+  if (type === 'image' || mimeType?.startsWith('image/')) {
+    return '<i class="fa-solid fa-file-image" style="color:#3b82f6;"></i>';
+  }
+  if (type === 'pdf' || name?.toLowerCase().endsWith('.pdf')) {
+    return '<i class="fa-solid fa-file-pdf" style="color:#ef4444;"></i>';
+  }
+  if (/\.(doc|docx)$/i.test(name || '')) {
+    return '<i class="fa-solid fa-file-word" style="color:#2563eb;"></i>';
+  }
+  if (/\.(xls|xlsx|csv)$/i.test(name || '')) {
+    return '<i class="fa-solid fa-file-excel" style="color:#10b981;"></i>';
+  }
+  if (/\.(ppt|pptx)$/i.test(name || '')) {
+    return '<i class="fa-solid fa-file-powerpoint" style="color:#f59e0b;"></i>';
+  }
+  if (/\.(zip|rar|7z)$/i.test(name || '')) {
+    return '<i class="fa-solid fa-file-zipper" style="color:#8b5cf6;"></i>';
+  }
+  return '<i class="fa-solid fa-file" style="color:#6b7280;"></i>';
 }
 
 function formatFileSize(bytes) {
-  if (bytes === 0) return '0 B';
+  if (!bytes || bytes === 0) return '0 B';
   const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 
-function initDocuments() {
-  // Bouton téléverser
+async function loadDocumentsData(uid) {
+  if (!uid) return;
+  try {
+    const q = query(collection(db, 'documents'), where('ownerId', '==', uid), limit(100));
+    const snap = await getDocs(q);
+    docsState.documents = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    updateDocumentsStats();
+    renderDocumentsContent();
+  } catch (err) {
+    console.warn('loadDocumentsData:', err);
+  }
+}
+
+function updateDocumentsStats() {
+  const docs = docsState.documents;
+  const counts = {
+    root: docs.filter(d => !d.folder || d.folder === 'root').length,
+    myFiles: docs.filter(d => d.ownerId === currentUid).length,
+    shared: docs.filter(d => d.shared === true).length,
+    images: docs.filter(d => d.type === 'image' || d.mimeType?.startsWith('image/')).length,
+    pdf: docs.filter(d => d.type === 'pdf' || d.name?.toLowerCase().endsWith('.pdf')).length,
+    documents: docs.filter(d => /\.(doc|docx|txt|rtf)$/i.test(d.name || '')).length,
+    spreadsheets: docs.filter(d => /\.(xls|xlsx|csv)$/i.test(d.name || '')).length
+  };
+
+  const totalSize = docs.reduce((acc, doc) => acc + (doc.size || 0), 0);
+  const sizeMB = (totalSize / (1024 * 1024)).toFixed(2);
+
+  ['root', 'my-files', 'shared', 'images', 'pdf', 'documents', 'spreadsheets'].forEach(key => {
+    const el = document.getElementById(`${key}-count`);
+    if (el) el.textContent = counts[key.replace('-', '')] || 0;
+  });
+
+  const usedEl = document.getElementById('storage-used');
+  if (usedEl) usedEl.textContent = `${sizeMB} MB / 1 GB`;
+
+  const progressEl = document.getElementById('storage-progress');
+  if (progressEl) {
+    const percentage = Math.min((totalSize / (1024 * 1024 * 1024)) * 100, 100);
+    progressEl.style.width = `${percentage}%`;
+  }
+}
+
+function renderDocumentsContent() {
+  const emptyState = document.getElementById('docs-empty-state');
+  const gridView = document.getElementById('docs-grid');
+  const listView = document.getElementById('docs-list-view');
+
+  let filtered = filterDocuments(docsState.documents);
+  filtered = sortDocuments(filtered);
+
+  if (filtered.length === 0) {
+    if (emptyState) emptyState.style.display = 'flex';
+    if (gridView) gridView.style.display = 'none';
+    if (listView) listView.style.display = 'none';
+    return;
+  }
+
+  if (emptyState) emptyState.style.display = 'none';
+
+  if (docsState.viewMode === 'grid') {
+    if (gridView) {
+      gridView.style.display = 'grid';
+      gridView.innerHTML = filtered.map(doc => renderDocGridItem(doc)).join('');
+    }
+    if (listView) listView.style.display = 'none';
+  } else {
+    if (listView) {
+      listView.style.display = 'block';
+      listView.innerHTML = filtered.map(doc => renderDocListItem(doc)).join('');
+    }
+    if (gridView) gridView.style.display = 'none';
+  }
+  attachDocumentEventListeners();
+}
+
+function filterDocuments(docs) {
+  let filtered = [...docs];
+  if (docsState.searchQuery) {
+    const q = docsState.searchQuery.toLowerCase();
+    filtered = filtered.filter(d => (d.name || '').toLowerCase().includes(q));
+  }
+  if (docsState.currentFolder === 'root') {
+    filtered = filtered.filter(d => !d.folder || d.folder === 'root');
+  } else if (docsState.currentFolder === 'my-files') {
+    filtered = filtered.filter(d => d.ownerId === currentUid);
+  } else if (docsState.currentFolder === 'shared') {
+    filtered = filtered.filter(d => d.shared === true);
+  } else if (docsState.currentFolder.startsWith('folder-')) {
+    filtered = filtered.filter(d => d.folder === docsState.currentFolder.replace('folder-', ''));
+  }
+  if (docsState.currentFilter === 'images') {
+    filtered = filtered.filter(d => d.type === 'image' || d.mimeType?.startsWith('image/'));
+  } else if (docsState.currentFilter === 'pdf') {
+    filtered = filtered.filter(d => d.type === 'pdf' || d.name?.toLowerCase().endsWith('.pdf'));
+  } else if (docsState.currentFilter === 'documents') {
+    filtered = filtered.filter(d => /\.(doc|docx|txt|rtf)$/i.test(d.name || ''));
+  } else if (docsState.currentFilter === 'spreadsheets') {
+    filtered = filtered.filter(d => /\.(xls|xlsx|csv)$/i.test(d.name || ''));
+  }
+  return filtered;
+}
+
+function sortDocuments(docs) {
+  return [...docs].sort((a, b) => {
+    if (docsState.sortBy === 'name') return (a.name || '').localeCompare(b.name || '');
+    if (docsState.sortBy === 'date') {
+      const dateA = a.updatedAt?.toDate ? a.updatedAt.toDate() : new Date(a.updatedAt || 0);
+      const dateB = b.updatedAt?.toDate ? b.updatedAt.toDate() : new Date(b.updatedAt || 0);
+      return dateB - dateA;
+    }
+    if (docsState.sortBy === 'size') return (b.size || 0) - (a.size || 0);
+    if (docsState.sortBy === 'type') return (a.type || '').localeCompare(b.type || '');
+    return 0;
+  });
+}
+
+function renderDocGridItem(doc) {
+  const icon = getFileIcon(doc.type, doc.name, doc.mimeType);
+  const date = formatRelativeDate(doc.updatedAt?.toDate ? doc.updatedAt.toDate() : new Date(doc.updatedAt || Date.now()));
+  const size = formatFileSize(doc.size || 0);
+  const name = escapeHtml(doc.name || 'Sans nom');
+  return `
+    <div class="doc-grid-item" data-id="${doc.id}">
+      <div class="doc-item-preview">
+        ${doc.type === 'image' || doc.mimeType?.startsWith('image/')
+          ? `<img src="${doc.url || ''}" alt="" loading="lazy" onerror="this.style.display='none'; this.parentElement.innerHTML='${icon.replace(/"/g, '&quot;')}';">`
+          : icon}
+      </div>
+      <div class="doc-item-info">
+        <div class="doc-item-name" title="${name}">${truncateText(name, 22)}</div>
+        <div class="doc-item-meta">${size} • ${date}</div>
+      </div>
+      <div class="doc-item-actions">
+        <button class="doc-action-btn doc-download" data-id="${doc.id}" title="Télécharger"><i class="fa-solid fa-download"></i></button>
+        <button class="doc-action-btn doc-delete" data-id="${doc.id}" title="Supprimer"><i class="fa-solid fa-trash"></i></button>
+      </div>
+    </div>`;
+}
+
+function renderDocListItem(doc) {
+  const icon = getFileIcon(doc.type, doc.name, doc.mimeType);
+  const date = doc.updatedAt?.toDate ? doc.updatedAt.toDate() : new Date(doc.updatedAt || Date.now());
+  return `
+    <div class="doc-list-item" data-id="${doc.id}">
+      <div class="doc-list-icon">${icon}</div>
+      <div class="doc-list-name">${escapeHtml(doc.name || 'Sans nom')}</div>
+      <div class="doc-list-type">${doc.type || 'Fichier'}</div>
+      <div class="doc-list-size">${formatFileSize(doc.size || 0)}</div>
+      <div class="doc-list-date">${date.toLocaleDateString('fr-FR')}</div>
+      <div class="doc-list-actions">
+        <button class="doc-action-btn doc-download" data-id="${doc.id}" title="Télécharger"><i class="fa-solid fa-download"></i></button>
+        <button class="doc-action-btn doc-delete" data-id="${doc.id}" title="Supprimer"><i class="fa-solid fa-trash"></i></button>
+      </div>
+    </div>`;
+}
+
+function attachDocumentEventListeners() {
+  document.querySelectorAll('.doc-download').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      downloadDocument(btn.dataset.id);
+    });
+  });
+  document.querySelectorAll('.doc-delete').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      deleteDocument(btn.dataset.id);
+    });
+  });
+  document.querySelectorAll('.doc-grid-item, .doc-list-item').forEach(item => {
+    item.addEventListener('click', () => openDocumentPreview(item.dataset.id));
+  });
+}
+
+async function uploadDocument(file) {
+  if (!file || !currentUid) return;
   const uploadBtn = document.getElementById('upload-doc-btn');
   if (uploadBtn) {
-    uploadBtn.addEventListener('click', () => {
-      alert('La fonctionnalité de téléversement sera bientôt disponible.');
+    uploadBtn.disabled = true;
+    uploadBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+  }
+  try {
+    const storageRef = ref(storage, `documents/${currentUid}/${Date.now()}_${file.name}`);
+    const snapshot = await uploadBytes(storageRef, file);
+    const downloadURL = await getDownloadURL(snapshot.ref);
+    await addDoc(collection(db, 'documents'), {
+      name: file.name, size: file.size, type: getDocumentType(file.name, file.type),
+      mimeType: file.type, url: downloadURL, storagePath: snapshot.ref.fullPath,
+      folder: docsState.currentFolder, ownerId: currentUid,
+      ownerName: document.getElementById('user-name')?.textContent || 'Utilisateur',
+      shared: false, createdAt: serverTimestamp(), updatedAt: serverTimestamp()
     });
+    await loadDocumentsData(currentUid);
+    showToast('Fichier téléversé avec succès', 'success');
+  } catch (err) {
+    console.error('Upload error:', err);
+    showToast('Erreur lors du téléversement', 'error');
+  } finally {
+    if (uploadBtn) {
+      uploadBtn.disabled = false;
+      uploadBtn.innerHTML = '<i class="fa-solid fa-cloud-arrow-up"></i> Téléverser';
+    }
   }
+}
 
-  // Bouton nouveau dossier
-  const newFolderBtn = document.getElementById('new-folder-btn');
-  if (newFolderBtn) {
-    newFolderBtn.addEventListener('click', () => {
-      alert('La fonctionnalité de création de dossier sera bientôt disponible.');
-    });
+async function downloadDocument(docId) {
+  const doc = docsState.documents.find(d => d.id === docId);
+  if (!doc?.url) return showToast('Document non trouvé', 'error');
+  const link = document.createElement('a');
+  link.href = doc.url;
+  link.download = doc.name || 'document';
+  link.target = '_blank';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  showToast('Téléchargement démarré', 'success');
+}
+
+async function deleteDocument(docId) {
+  const doc = docsState.documents.find(d => d.id === docId);
+  if (!doc) return;
+  if (!confirm(`Supprimer "${doc.name}" ?`)) return;
+  try {
+    if (doc.storagePath) await deleteObject(ref(storage, doc.storagePath)).catch(() => {});
+    await deleteDoc(doc(db, 'documents', docId));
+    await loadDocumentsData(currentUid);
+    showToast('Document supprimé', 'success');
+  } catch (err) {
+    console.error('Delete error:', err);
+    showToast('Erreur lors de la suppression', 'error');
   }
+}
 
-  // Recherche
-  const searchInput = document.getElementById('docs-search-input');
-  if (searchInput) {
-    searchInput.addEventListener('input', debounce(async (e) => {
-      const query = e.target.value.toLowerCase();
-      // Logique de recherche à implémenter
-    }, 300));
+async function createFolder(folderName) {
+  if (!folderName || !currentUid) return;
+  try {
+    const userRef = doc(db, 'users', currentUid);
+    const userSnap = await getDoc(userRef);
+    if (userSnap.exists()) {
+      const folders = userSnap.data().folders || [];
+      if (!folders.includes(folderName)) {
+        folders.push(folderName);
+        await updateDoc(userRef, { folders });
+        showToast('Dossier créé', 'success');
+      }
+    }
+  } catch (err) {
+    console.error('Folder error:', err);
+    showToast('Erreur lors de la création du dossier', 'error');
   }
+}
 
-  // Filtres
-  document.querySelectorAll('.filter-btn').forEach(btn => {
+function openDocumentPreview(docId) {
+  const doc = docsState.documents.find(d => d.id === docId);
+  if (!doc) return;
+  docsState.selectedFile = doc;
+  const modal = document.getElementById('preview-modal');
+  const filenameEl = document.getElementById('preview-filename');
+  const previewArea = document.getElementById('file-preview-area');
+  const detailsEl = document.getElementById('file-details');
+
+  if (filenameEl) filenameEl.textContent = doc.name || 'Fichier';
+  if (previewArea) {
+    if (doc.type === 'image' || doc.mimeType?.startsWith('image/')) {
+      previewArea.innerHTML = `<img src="${doc.url}" alt="" style="max-width:100%;max-height:400px;border-radius:8px;">`;
+    } else {
+      previewArea.innerHTML = `<div class="preview-placeholder">${getFileIcon(doc.type, doc.name, doc.mimeType)}<p>Aperçu non disponible</p><a href="${doc.url}" target="_blank" class="btn-primary-sm" style="margin-top:16px;"><i class="fa-solid fa-external-link-alt"></i> Ouvrir</a></div>`;
+    }
+  }
+  if (detailsEl) {
+    const date = doc.createdAt?.toDate ? doc.createdAt.toDate() : new Date(doc.createdAt || Date.now());
+    detailsEl.innerHTML = `
+      <div class="file-detail-row"><span class="detail-label">Nom:</span><span class="detail-value">${escapeHtml(doc.name || '-')}</span></div>
+      <div class="file-detail-row"><span class="detail-label">Type:</span><span class="detail-value">${doc.type || 'Inconnu'}</span></div>
+      <div class="file-detail-row"><span class="detail-label">Taille:</span><span class="detail-value">${formatFileSize(doc.size || 0)}</span></div>
+      <div class="file-detail-row"><span class="detail-label">Créé le:</span><span class="detail-value">${date.toLocaleString('fr-FR')}</span></div>`;
+  }
+  if (modal) modal.style.display = 'flex';
+}
+
+function getDocumentType(name, mimeType) {
+  if (mimeType?.startsWith('image/')) return 'image';
+  if (name?.toLowerCase().endsWith('.pdf')) return 'pdf';
+  if (/\.(doc|docx)$/i.test(name || '')) return 'document';
+  if (/\.(xls|xlsx|csv)$/i.test(name || '')) return 'spreadsheet';
+  if (/\.(ppt|pptx)$/i.test(name || '')) return 'presentation';
+  return 'file';
+}
+
+function formatRelativeDate(date) {
+  if (!date) return '-';
+  const now = new Date();
+  const diffMins = Math.floor((now - date) / 60000);
+  if (diffMins < 1) return 'À l\'instant';
+  if (diffMins < 60) return `Il y a ${diffMins} min`;
+  const diffHours = Math.floor(diffMins / 60);
+  if (diffHours < 24) return `Il y a ${diffHours} h`;
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays === 1) return 'Hier';
+  if (diffDays < 7) return `Il y a ${diffDays} jours`;
+  return date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+}
+
+function truncateText(text, max) {
+  if (!text || text.length <= max) return text;
+  return text.substring(0, max) + '...';
+}
+
+function showToast(message, type = 'info') {
+  const toast = document.createElement('div');
+  toast.className = `toast toast-${type}`;
+  toast.innerHTML = `<i class="fa-solid fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'circle-exclamation' : 'info-circle'}"></i><span>${message}</span>`;
+  Object.assign(toast.style, {
+    position: 'fixed', bottom: '20px', right: '20px', zIndex: '9999',
+    background: type === 'success' ? '#10b981' : type === 'error' ? '#ef4444' : '#3b82f6',
+    color: 'white', padding: '12px 20px', borderRadius: '8px', display: 'flex',
+    alignItems: 'center', gap: '10px', fontSize: '14px', fontWeight: '500',
+    boxShadow: '0 4px 12px rgba(0,0,0,0.15)', animation: 'slideIn 0.3s ease'
+  });
+  document.body.appendChild(toast);
+  setTimeout(() => { toast.remove(); }, 3000);
+}
+
+function initDocuments() {
+  const uploadBtn = document.getElementById('upload-doc-btn');
+  const emptyUploadBtn = document.getElementById('empty-upload-btn');
+  const fileInput = document.getElementById('file-upload-input');
+  const triggerUpload = () => fileInput?.click();
+  uploadBtn?.addEventListener('click', triggerUpload);
+  emptyUploadBtn?.addEventListener('click', triggerUpload);
+  fileInput?.addEventListener('change', (e) => {
+    Array.from(e.target.files).forEach(file => uploadDocument(file));
+    fileInput.value = '';
+  });
+
+  const folderModal = document.getElementById('folder-modal');
+  const folderInput = document.getElementById('folder-name-input');
+  document.getElementById('new-folder-btn')?.addEventListener('click', () => {
+    if (folderModal) { folderModal.style.display = 'flex'; folderInput?.focus(); }
+  });
+  const closeFolderModal = () => { if (folderModal) folderModal.style.display = 'none'; if (folderInput) folderInput.value = ''; };
+  document.getElementById('folder-modal-close')?.addEventListener('click', closeFolderModal);
+  document.getElementById('folder-cancel-btn')?.addEventListener('click', closeFolderModal);
+  document.getElementById('folder-create-btn')?.addEventListener('click', async () => {
+    const name = folderInput?.value.trim();
+    if (name) { await createFolder(name); closeFolderModal(); }
+  });
+  folderInput?.addEventListener('keypress', (e) => { if (e.key === 'Enter') document.getElementById('folder-create-btn')?.click(); });
+
+  document.querySelectorAll('.view-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-      // Logique de filtrage à implémenter
+      docsState.viewMode = btn.dataset.view;
+      renderDocumentsContent();
     });
+  });
+
+  document.getElementById('docs-sort-select')?.addEventListener('change', (e) => {
+    docsState.sortBy = e.target.value;
+    renderDocumentsContent();
+  });
+
+  document.querySelectorAll('.docs-nav-item').forEach(item => {
+    item.addEventListener('click', () => {
+      document.querySelectorAll('.docs-nav-item').forEach(i => i.classList.remove('active'));
+      item.classList.add('active');
+      docsState.currentFolder = item.dataset.folder || 'root';
+      docsState.currentFilter = item.dataset.type || 'all';
+      renderDocumentsContent();
+    });
+  });
+
+  document.getElementById('docs-search-input')?.addEventListener('input', debounce((e) => {
+    docsState.searchQuery = e.target.value;
+    renderDocumentsContent();
+  }, 300));
+
+  document.getElementById('preview-modal-close')?.addEventListener('click', () => {
+    document.getElementById('preview-modal').style.display = 'none';
+  });
+  document.getElementById('file-delete-btn')?.addEventListener('click', () => {
+    if (docsState.selectedFile) deleteDocument(docsState.selectedFile.id);
+    document.getElementById('preview-modal').style.display = 'none';
+  });
+  document.getElementById('file-download-btn')?.addEventListener('click', () => {
+    if (docsState.selectedFile) downloadDocument(docsState.selectedFile.id);
   });
 }
 
