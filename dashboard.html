@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AGORA — Dashboard</title>
+  <link rel="stylesheet" href="operating-system.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+
+  <!-- Écran de chargement -->
+  <div id="loading-screen" class="loading-screen">
+    <div class="loading-logo">
+      <i class="fa-solid fa-bolt" style="color:var(--accent);"></i>
+      AGORA
+    </div>
+    <div class="loading-bar-container">
+      <div class="loading-bar"></div>
+    </div>
+    <p class="loading-text">Chargement de votre espace…</p>
+  </div>
+
+  <!-- App Shell -->
+  <div id="app-container" class="app-container" style="display:none;">
+
+    <!-- ── Sidebar gauche ─────────────────────────────── -->
+    <aside class="sidebar" id="sidebar">
+
+      <div class="sidebar-logo">
+        <div class="sidebar-logo-icon">
+          <i class="fa-solid fa-bolt"></i>
+        </div>
+        <span class="sidebar-logo-text">AGORA</span>
+        <button id="sidebar-toggle" class="sidebar-toggle" aria-label="Réduire le menu">
+          <i class="fa-solid fa-chevron-left"></i>
+        </button>
+      </div>
+
+      <nav class="sidebar-nav" id="main-nav">
+
+        <span class="nav-section-label">Principal</span>
+
+        <a href="#" class="menu-item active" data-target="dashboard">
+          <i class="fa-solid fa-chart-pie"></i>
+          <span class="nav-label">Dashboard</span>
+        </a>
+        <a href="#" class="menu-item" data-target="clients">
+          <i class="fa-solid fa-users"></i>
+          <span class="nav-label">Clients</span>
+        </a>
+        <a href="#" class="menu-item" data-target="projets">
+          <i class="fa-solid fa-folder-open"></i>
+          <span class="nav-label">Projets</span>
+        </a>
+        <a href="#" class="menu-item" data-target="messagerie">
+          <i class="fa-solid fa-comment-dots"></i>
+          <span class="nav-label">Messagerie</span>
+          <span class="nav-badge" id="msg-badge" style="display:none;"></span>
+        </a>
+
+        <span class="nav-section-label">Outils</span>
+
+        <a href="#" class="menu-item" data-target="planning">
+          <i class="fa-solid fa-calendar-days"></i>
+          <span class="nav-label">Planning</span>
+        </a>
+        <a href="#" class="menu-item" data-target="documents">
+          <i class="fa-solid fa-file-lines"></i>
+          <span class="nav-label">Documents</span>
+        </a>
+
+        <span class="nav-section-label">Compte</span>
+
+        <a href="#" class="menu-item" data-target="parametres">
+          <i class="fa-solid fa-gear"></i>
+          <span class="nav-label">Paramètres</span>
+        </a>
+
+      </nav>
+
+      <!-- Profil -->
+      <div class="sidebar-user">
+        <div class="sidebar-user-inner" id="user-profile-trigger">
+          <div class="avatar-wrap">
+            <img
+              src="https://ui-avatars.com/api/?name=U&background=4f46e5&color=fff&size=34"
+              alt="Avatar"
+              class="user-avatar"
+              id="user-avatar-img"
+            >
+            <span class="status-dot" id="status-dot"></span>
+          </div>
+          <div class="user-info-block">
+            <span class="user-name" id="user-name">—</span>
+            <span class="user-status-text" id="user-status-text">Disponible</span>
+          </div>
+          <i class="fa-solid fa-chevron-up user-chevron"></i>
+        </div>
+
+        <div class="presence-menu" id="presence-menu">
+          <div class="presence-menu-header">Statut de présence</div>
+          <button class="presence-option" data-status="disponible">
+            <span class="presence-dot" style="background:#10b981;"></span>
+            Disponible
+          </button>
+          <button class="presence-option" data-status="en_pause">
+            <span class="presence-dot" style="background:#f59e0b;"></span>
+            En pause
+          </button>
+          <button class="presence-option" data-status="indisponible">
+            <span class="presence-dot" style="background:#ef4444;"></span>
+            Indisponible
+          </button>
+        </div>
+      </div>
+
+    </aside>
+
+    <!-- ── Zone centrale ─────────────────────────────── -->
+    <main class="main-content" id="main-content"></main>
+
+    <!-- ── Sidebar droite ────────────────────────────── -->
+    <aside class="right-sidebar">
+      <div class="right-sidebar-header">
+        <span class="right-sidebar-title">Activité récente</span>
+        <a href="#" class="right-sidebar-action">Tout lu</a>
+      </div>
+
+      <div class="right-sidebar-body" id="notification-list">
+
+        <div class="activity-item">
+          <img src="https://ui-avatars.com/api/?name=LM&background=0ea5e9&color=fff&size=32" alt="LM" class="activity-avatar">
+          <div class="activity-body">
+            <p class="activity-text"><strong>Lucas Martin</strong> vous a envoyé un message</p>
+            <p class="activity-time">Il y a 5 min</p>
+          </div>
+        </div>
+
+        <div class="activity-item">
+          <div class="activity-icon" style="background:#fee2e2; color:#ef4444;">
+            <i class="fa-solid fa-file-pdf"></i>
+          </div>
+          <div class="activity-body">
+            <p class="activity-text"><strong>Nike_Brief_v2.pdf</strong> ajouté dans Projets</p>
+            <p class="activity-time">Il y a 15 min</p>
+          </div>
+        </div>
+
+        <div class="activity-item">
+          <div class="activity-icon" style="background:#d1fae5; color:#10b981;">
+            <i class="fa-solid fa-circle-check"></i>
+          </div>
+          <div class="activity-body">
+            <p class="activity-text">Tâche <strong>"Bannière hero"</strong> marquée terminée</p>
+            <p class="activity-time">Il y a 1 h</p>
+          </div>
+        </div>
+
+        <div class="activity-item">
+          <img src="https://ui-avatars.com/api/?name=CB&background=a78bfa&color=fff&size=32" alt="CB" class="activity-avatar">
+          <div class="activity-body">
+            <p class="activity-text"><strong>Camille B.</strong> a commenté un fichier</p>
+            <p class="activity-time">Il y a 2 h</p>
+          </div>
+        </div>
+
+        <div class="activity-item">
+          <div class="activity-icon" style="background:#fef3c7; color:#f59e0b;">
+            <i class="fa-solid fa-triangle-exclamation"></i>
+          </div>
+          <div class="activity-body">
+            <p class="activity-text">Délai dépassé sur le projet <strong>Renault</strong></p>
+            <p class="activity-time">Il y a 3 h</p>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="right-sidebar-footer">
+        <button class="btn-ghost-sm">Voir toutes les notifications</button>
+      </div>
+    </aside>
+
+  </div>
+
+  <script type="module" src="dashboard.js"></script>
+</body>
+</html>

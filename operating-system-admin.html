@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AGORA — Administration</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="operating-system.css">
+</head>
+<body>
+
+    <div class="admin-container">
+
+        <!-- En-tête -->
+        <div class="admin-header">
+            <div class="logo">
+                <i class="fa-solid fa-cube"></i>
+                AGORA <span style="font-size: 14px; font-weight: 400; color: var(--text-secondary); margin-left: 8px;">Administration</span>
+            </div>
+            <a href="operating-system.html" class="back-link">
+                <i class="fa-solid fa-arrow-left"></i>
+                Retour au portail
+            </a>
+        </div>
+
+        <!-- Grille principale -->
+        <div class="admin-grid">
+
+            <!-- Colonne gauche : formulaire de création -->
+            <div class="card">
+                <h3><i class="fa-solid fa-user-plus" style="color: var(--accent-color); margin-right: 8px;"></i>Créer un utilisateur</h3>
+
+                <div class="form-group">
+                    <label for="first-name">Prénom</label>
+                    <input type="text" id="first-name" placeholder="Ex : Marie" autocomplete="given-name">
+                </div>
+
+                <div class="form-group">
+                    <label for="last-name">Nom</label>
+                    <input type="text" id="last-name" placeholder="Ex : Dupont" autocomplete="family-name">
+                </div>
+
+                <div class="form-group">
+                    <label for="new-email">Adresse email</label>
+                    <input type="email" id="new-email" placeholder="marie.dupont@agence.fr" autocomplete="email">
+                </div>
+
+                <div class="form-group">
+                    <label for="new-password">Mot de passe</label>
+                    <input type="password" id="new-password" placeholder="Minimum 6 caractères" autocomplete="new-password">
+                </div>
+
+                <div class="form-group">
+                    <label for="new-role">Rôle</label>
+                    <select id="new-role">
+                        <option value="employee">Employé</option>
+                        <option value="admin">Administrateur</option>
+                    </select>
+                </div>
+
+                <button id="create-user-btn" class="btn-primary">
+                    <i class="fa-solid fa-plus" style="margin-right: 8px;"></i>
+                    Créer l'utilisateur
+                </button>
+
+                <div id="create-error" class="error-message"></div>
+                <div id="create-success" class="success-message"></div>
+            </div>
+
+            <!-- Colonne droite : liste des utilisateurs -->
+            <div class="card">
+                <div class="card-header">
+                    <h3 style="margin-bottom: 0;"><i class="fa-solid fa-users" style="color: var(--accent-color); margin-right: 8px;"></i>Utilisateurs</h3>
+                    <button id="refresh-btn" style="background: none; border: 1px solid var(--border-color); border-radius: 6px; padding: 6px 10px; cursor: pointer; color: var(--text-secondary); font-size: 13px;" title="Rafraîchir">
+                        <i class="fa-solid fa-rotate-right"></i>
+                    </button>
+                </div>
+                <div id="users-list">
+                    <div style="text-align: center; padding: 40px 0; color: var(--text-secondary);">
+                        <i class="fa-solid fa-spinner fa-spin" style="font-size: 24px; margin-bottom: 12px; display: block;"></i>
+                        Chargement des utilisateurs…
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp, initializeApp as initializeSecondaryApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+        import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+        import { getFirestore, doc, getDoc, setDoc, collection, getDocs, orderBy, query, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+
+        // ── Configuration Firebase ──────────────────────────────────────────────
+        const firebaseConfig = {
+            apiKey: "AIzaSyAeQmIo2EEQNSvuBt54obS-qrRxn35WaT8",
+            authDomain: "operating-system-ea358.firebaseapp.com",
+            projectId: "operating-system-ea358",
+            storageBucket: "operating-system-ea358.firebasestorage.app",
+            messagingSenderId: "896027329219",
+            appId: "1:896027329219:web:59d7ef893c8ee61c10d876",
+            measurementId: "G-8KRMJJF1C8"
+        };
+
+        // Instance principale
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // ── Tâche 8.1 — Contrôle d'accès admin ─────────────────────────────────
+
+        /**
+         * Vérifie si un profil Firestore possède le rôle admin.
+         * @param {Object|null} profile - Document utilisateur Firestore
+         * @returns {boolean}
+         */
+        function checkAdminRole(profile) {
+            return profile?.role === 'admin';
+        }
+
+        // Redirection si non authentifié ou non-admin
+        onAuthStateChanged(auth, async (user) => {
+            if (!user) {
+                window.location.href = 'operating-system.html';
+                return;
+            }
+            try {
+                const snap = await getDoc(doc(db, 'users', user.uid));
+                const profile = snap.data();
+                if (!checkAdminRole(profile)) {
+                    window.location.href = 'operating-system.html';
+                    return;
+                }
+                // Utilisateur admin confirmé : initialiser la page
+                initAdminPage();
+            } catch (err) {
+                console.error('Erreur lors de la vérification du rôle :', err);
+                window.location.href = 'operating-system.html';
+            }
+        });
+
+        // ── Tâche 8.3 — Création d'utilisateur via instance secondaire ─────────
+
+        /**
+         * Construit le profil utilisateur à écrire dans Firestore.
+         * @param {{ firstName: string, lastName: string, email: string, role: string }} data
+         * @param {string} uid
+         * @returns {Object}
+         */
+        function buildUserProfile(data, uid) {
+            return {
+                uid,
+                email: data.email,
+                displayName: data.firstName + ' ' + data.lastName,
+                role: data.role || 'employee',
+                photoURL: null,
+                createdAt: serverTimestamp()
+            };
+        }
+
+        /**
+         * Crée un compte Firebase Auth + profil Firestore sans déconnecter l'admin.
+         * Utilise une instance Firebase secondaire isolée.
+         */
+        async function handleCreateUser() {
+            const btn = document.getElementById('create-user-btn');
+            const errorDiv = document.getElementById('create-error');
+            const successDiv = document.getElementById('create-success');
+
+            // Réinitialiser les messages
+            errorDiv.style.display = 'none';
+            errorDiv.textContent = '';
+            successDiv.style.display = 'none';
+            successDiv.textContent = '';
+
+            // Récupérer les valeurs du formulaire
+            const firstName = document.getElementById('first-name').value.trim();
+            const lastName  = document.getElementById('last-name').value.trim();
+            const email     = document.getElementById('new-email').value.trim();
+            const password  = document.getElementById('new-password').value;
+            const role      = document.getElementById('new-role').value;
+
+            // Validation basique côté client
+            if (!firstName || !lastName) {
+                showFormError(errorDiv, 'Le prénom et le nom sont requis.');
+                return;
+            }
+
+            // Désactiver le bouton pendant l'opération
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin" style="margin-right: 8px;"></i>Création en cours…';
+
+            try {
+                // Instance secondaire : évite de déconnecter l'admin courant
+                let secondaryApp;
+                try {
+                    secondaryApp = initializeSecondaryApp(firebaseConfig, 'secondary');
+                } catch (e) {
+                    // L'instance secondaire existe déjà (HMR ou rechargement partiel)
+                    const { getApp } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js');
+                    secondaryApp = getApp('secondary');
+                }
+
+                const secondaryAuth = getAuth(secondaryApp);
+                const { signOut } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js');
+
+                // Créer l'utilisateur dans Firebase Auth
+                const credential = await createUserWithEmailAndPassword(secondaryAuth, email, password);
+                const newUid = credential.user.uid;
+
+                // Construire et sauvegarder le profil dans Firestore (instance principale)
+                const profile = buildUserProfile({ firstName, lastName, email, role }, newUid);
+                await setDoc(doc(db, 'users', newUid), profile);
+
+                // Déconnecter l'instance secondaire immédiatement
+                await signOut(secondaryAuth);
+
+                // Succès
+                successDiv.textContent = `L'utilisateur ${firstName} ${lastName} a été créé avec succès.`;
+                successDiv.style.display = 'block';
+
+                // Réinitialiser le formulaire
+                document.getElementById('first-name').value = '';
+                document.getElementById('last-name').value = '';
+                document.getElementById('new-email').value = '';
+                document.getElementById('new-password').value = '';
+                document.getElementById('new-role').value = 'employee';
+
+                // Rafraîchir la liste
+                await loadUsersList();
+
+            } catch (err) {
+                console.error('Erreur création utilisateur :', err);
+                showFormError(errorDiv, handleCreateError(err.code));
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fa-solid fa-plus" style="margin-right: 8px;"></i>Créer l\'utilisateur';
+            }
+        }
+
+        // ── Tâche 8.5 — Gestion des erreurs + liste des utilisateurs ───────────
+
+        /**
+         * Traduit un code d'erreur Firebase Auth en message français descriptif.
+         * @param {string} code - Code d'erreur Firebase
+         * @returns {string}
+         */
+        function handleCreateError(code) {
+            const errors = {
+                'auth/email-already-in-use': 'Cet email est déjà associé à un compte.',
+                'auth/weak-password':        'Le mot de passe doit contenir au moins 6 caractères.',
+                'auth/invalid-email':        'Adresse email invalide.',
+                'auth/missing-email':        'L\'adresse email est requise.',
+                'auth/missing-password':     'Le mot de passe est requis.'
+            };
+            return errors[code] || 'Une erreur est survenue. Veuillez réessayer.';
+        }
+
+        /**
+         * Affiche un message d'erreur dans le div cible.
+         * @param {HTMLElement} el
+         * @param {string} message
+         */
+        function showFormError(el, message) {
+            el.textContent = message;
+            el.style.display = 'block';
+        }
+
+        /**
+         * Charge la liste des utilisateurs depuis Firestore (orderBy createdAt desc).
+         */
+        async function loadUsersList() {
+            const container = document.getElementById('users-list');
+            container.innerHTML = `
+                <div style="text-align: center; padding: 24px 0; color: var(--text-secondary);">
+                    <i class="fa-solid fa-spinner fa-spin" style="margin-right: 8px;"></i>
+                    Chargement…
+                </div>`;
+            try {
+                const q = query(collection(db, 'users'), orderBy('createdAt', 'desc'));
+                const snapshot = await getDocs(q);
+                const users = snapshot.docs.map(d => d.data());
+                renderUserList(users);
+            } catch (err) {
+                console.error('Erreur chargement utilisateurs :', err);
+                container.innerHTML = `
+                    <div style="color: var(--red); font-size: 13px; padding: 16px 0;">
+                        <i class="fa-solid fa-triangle-exclamation" style="margin-right: 6px;"></i>
+                        Impossible de charger les données. Vérifiez votre connexion.
+                    </div>`;
+            }
+        }
+
+        /**
+         * Génère le tableau HTML des utilisateurs.
+         * @param {Array} users - Tableau de profils utilisateurs
+         */
+        function renderUserList(users) {
+            const container = document.getElementById('users-list');
+
+            if (users.length === 0) {
+                container.innerHTML = `
+                    <div style="text-align: center; padding: 40px 0; color: var(--text-secondary);">
+                        <i class="fa-solid fa-users-slash" style="font-size: 24px; margin-bottom: 12px; display: block;"></i>
+                        Aucun utilisateur enregistré.
+                    </div>`;
+                return;
+            }
+
+            const rows = users.map(u => {
+                const displayName = u.displayName || '—';
+                const email       = u.email || '—';
+                const role        = u.role || 'employee';
+                const roleLabel   = role === 'admin' ? 'Admin' : 'Employé';
+                const createdAt   = u.createdAt?.toDate
+                    ? u.createdAt.toDate().toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                    : (u.createdAt ? new Date(u.createdAt).toLocaleDateString('fr-FR') : '—');
+
+                return `
+                <tr>
+                    <td>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <div style="width: 32px; height: 32px; border-radius: 50%; background: #e0e7ff; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; color: var(--accent-color); flex-shrink: 0;">
+                                ${displayName.charAt(0).toUpperCase()}
+                            </div>
+                            <span style="font-weight: 500;">${escapeHtml(displayName)}</span>
+                        </div>
+                    </td>
+                    <td style="color: var(--text-secondary);">${escapeHtml(email)}</td>
+                    <td><span class="role-badge ${escapeHtml(role)}">${escapeHtml(roleLabel)}</span></td>
+                    <td style="color: var(--text-secondary); white-space: nowrap;">${createdAt}</td>
+                </tr>`;
+            }).join('');
+
+            container.innerHTML = `
+                <table class="users-table">
+                    <thead>
+                        <tr>
+                            <th>Nom</th>
+                            <th>Email</th>
+                            <th>Rôle</th>
+                            <th>Créé le</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${rows}
+                    </tbody>
+                </table>`;
+        }
+
+        /**
+         * Échappe les caractères HTML pour éviter les injections XSS.
+         * @param {string} str
+         * @returns {string}
+         */
+        function escapeHtml(str) {
+            const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+            return String(str).replace(/[&<>"']/g, m => map[m]);
+        }
+
+        // ── Initialisation de la page ───────────────────────────────────────────
+
+        function initAdminPage() {
+            // Charger la liste des utilisateurs
+            loadUsersList();
+
+            // Attacher l'événement de création
+            document.getElementById('create-user-btn').addEventListener('click', handleCreateUser);
+
+            // Bouton de rafraîchissement
+            document.getElementById('refresh-btn').addEventListener('click', loadUsersList);
+        }
+
+    </script>
+
+</body>
+</html>

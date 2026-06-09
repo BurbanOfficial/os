@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AGORA — Connexion</title>
+  <link rel="stylesheet" href="operating-system.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+
+  <div class="login-page">
+
+    <!-- Panneau gauche — branding -->
+    <div class="login-brand">
+      <div class="login-brand-logo">
+        <i class="fa-solid fa-bolt"></i>
+        AGORA
+      </div>
+
+      <div class="login-brand-body">
+        <h1>Votre espace de travail centralisé</h1>
+        <p>Gérez vos projets, clients, équipes et rendez-vous depuis une seule interface.</p>
+      </div>
+
+      <div class="login-brand-footer">
+        © 2026 AGORA — Tous droits réservés
+      </div>
+    </div>
+
+    <!-- Panneau droit — formulaire -->
+    <div class="login-form-panel">
+      <div class="login-box">
+
+        <div class="login-box-header">
+          <h2>Bon retour 👋</h2>
+          <p>Connectez-vous à votre compte pour continuer</p>
+        </div>
+
+        <form id="login-form" novalidate>
+          <div class="field">
+            <label for="email-input">Adresse email</label>
+            <input type="email" id="email-input" placeholder="vous@agence.com" autocomplete="email" required>
+          </div>
+
+          <div class="field">
+            <label for="password-input">Mot de passe</label>
+            <input type="password" id="password-input" placeholder="••••••••" autocomplete="current-password" required>
+          </div>
+
+          <div id="login-error" class="error-message"></div>
+
+          <button type="submit" id="login-btn" class="btn-login">
+            <span id="login-btn-text">Se connecter</span>
+            <span id="login-btn-spinner" class="btn-spinner" style="display:none;"></span>
+          </button>
+        </form>
+
+      </div>
+    </div>
+
+  </div>
+
+  <script type="module" src="login.js"></script>
+</body>
+</html>
