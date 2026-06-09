@@ -110,10 +110,15 @@ function hideLoadingScreen() {
 
 async function loadInitialData(uid) {
   try {
+    // Charger en parallèle : profil, présence, et données critiques
+    const [userSnap, presenceSnap] = await Promise.all([
+      getDoc(doc(db, 'users', uid)),
+      getDoc(doc(db, 'presence', uid))
+    ]);
+
     // Profil utilisateur
-    const snap = await getDoc(doc(db, 'users', uid));
-    if (snap.exists()) {
-      const profile = snap.data();
+    if (userSnap.exists()) {
+      const profile = userSnap.data();
       const nameEl   = document.getElementById('user-name');
       const avatarEl = document.getElementById('user-avatar-img');
 
@@ -133,7 +138,6 @@ async function loadInitialData(uid) {
     }
 
     // Statut de présence
-    const presenceSnap = await getDoc(doc(db, 'presence', uid));
     if (presenceSnap.exists()) {
       applyPresenceUI(presenceSnap.data().status);
     }
@@ -146,7 +150,10 @@ async function loadInitialData(uid) {
   initNavigation();
   initPresenceMenu();
 
-  // Charger le dashboard
+  // Précharger les données critiques en arrière-plan
+  preloadCriticalData(uid).catch(() => {});
+
+  // Charger le dashboard immédiatement (les données seront mises à jour)
   await renderPageContent('dashboard');
 }
 
@@ -177,13 +184,83 @@ function injectAdminNavItem() {
    NAVIGATION SPA
 ═══════════════════════════════════════════════════════════ */
 
+// Cache pour les données chargées
+const dataCache = {
+  projects: null,
+  clients: null,
+  users: null,
+  tasks: null,
+  appointments: null,
+  lastFetch: {}
+};
+
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
+// Préchargement des données critiques au démarrage
+async function preloadCriticalData(uid) {
+  if (!uid) return;
+
+  // Charger en parallèle les données dont on a besoin rapidement
+  const promises = [
+    loadUserProfile(uid),
+    loadProjectsData().catch(() => {}),
+    loadClientsData().catch(() => {}),
+  ];
+
+  await Promise.allSettled(promises);
+}
+
+// Réinitialiser le cache quand on crée/modifie des données
+function invalidateCache(type) {
+  dataCache[type] = null;
+  dataCache.lastFetch[type] = null;
+}
+
+// Fonction utilitaire pour charger avec cache
+async function loadWithCache(cacheKey, fetchFn, forceRefresh = false) {
+  const now = Date.now();
+  if (!forceRefresh && dataCache[cacheKey] && dataCache.lastFetch[cacheKey] && 
+      (now - dataCache.lastFetch[cacheKey]) < CACHE_DURATION) {
+    return dataCache[cacheKey];
+  }
+
+  const data = await fetchFn();
+  dataCache[cacheKey] = data;
+  dataCache.lastFetch[cacheKey] = now;
+  return data;
+}
+
+function showLoading() {
+  let loader = document.getElementById('global-loader');
+  if (!loader) {
+    loader = document.createElement('div');
+    loader.id = 'global-loader';
+    loader.innerHTML = `
+      <div class="loader-overlay">
+        <div class="loader-spinner"></div>
+        <p class="loader-text">Chargement...</p>
+      </div>
+    `;
+    document.body.appendChild(loader);
+  }
+  loader.style.display = 'flex';
+}
+
+function hideLoading() {
+  const loader = document.getElementById('global-loader');
+  if (loader) loader.style.display = 'none';
+}
+
 async function renderPageContent(pageName) {
   const main = document.getElementById('main-content');
   if (!main) return;
 
-  // Fade out
+  // Afficher le loader immédiatement
+  showLoading();
+
+  // Fade out rapide
   main.style.opacity = '0';
-  await new Promise(r => setTimeout(r, 150));
+  await new Promise(r => setTimeout(r, 80));
 
   // Marquer l'item actif
   document.querySelectorAll('.menu-item[data-target]').forEach(item => {
@@ -193,19 +270,39 @@ async function renderPageContent(pageName) {
   switch (pageName) {
     case 'dashboard':
       main.innerHTML = getDashboardHTML();
-      await loadDashboardData(currentUid);
-      scheduleMidnightRefresh();
-      initGlobalSearch();
+      // Dashboard data loading is parallelized
+      loadDashboardData(currentUid).then(() => {
+        scheduleMidnightRefresh();
+        initGlobalSearch();
+      });
       break;
 
     case 'projets':
       main.innerHTML = getProjectsHTML();
-      await loadProjectsData();
+      // Load projects with cache check
+      const now = Date.now();
+      if (!dataCache.projects || !dataCache.lastFetch.projects || 
+          (now - dataCache.lastFetch.projects) > CACHE_DURATION) {
+        await loadProjectsData();
+        dataCache.lastFetch.projects = now;
+      } else {
+        // Use cached data, just render
+        renderProjectsContent();
+        const subtitle = document.getElementById('projects-subtitle');
+        if (subtitle) subtitle.textContent = `${projectsState.projects.length} projet${projectsState.projects.length > 1 ? 's' : ''}`;
+      }
       initProjectsTabs();
       break;
 
     case 'clients':
       main.innerHTML = getClientsHTML();
+      // Load clients with cache check
+      const nowClients = Date.now();
+      if (!dataCache.clients || !dataCache.lastFetch.clients || 
+          (nowClients - dataCache.lastFetch.clients) > CACHE_DURATION) {
+        await loadClientsData();
+        dataCache.lastFetch.clients = nowClients;
+      }
       initClientsSection();
       break;
 
@@ -218,9 +315,17 @@ async function renderPageContent(pageName) {
       if (currentRole !== 'admin') {
         main.innerHTML = `<div class="page-body"><div class="section-placeholder"><i class="fa-solid fa-lock"></i><p>Accès réservé aux administrateurs.</p></div></div>`;
         main.style.opacity = '1';
+        hideLoading();
         return;
       }
       main.innerHTML = getUsersAdminHTML();
+      // Load users with cache check
+      const nowUsers = Date.now();
+      if (!dataCache.users || !dataCache.lastFetch.users || 
+          (nowUsers - dataCache.lastFetch.users) > CACHE_DURATION) {
+        await loadUsersData();
+        dataCache.lastFetch.users = nowUsers;
+      }
       initUsersAdmin();
       break;
 
@@ -283,8 +388,9 @@ async function renderPageContent(pageName) {
     }
   }
 
-  // Fade in
+  // Fade in et cacher le loader
   main.style.opacity = '1';
+  hideLoading();
 }
 
 
@@ -2729,15 +2835,27 @@ const projectsState = {
   currentTab: 'liste'
 };
 
-async function loadProjectsData() {
+async function loadProjectsData(forceRefresh = false) {
   if (!currentUid) return;
-  try {
-    // Load projects
-    const projectsQuery = query(collection(db, 'projects'), limit(50));
-    const projectsSnap = await getDocs(projectsQuery);
-    projectsState.projects = projectsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
 
-    // Load tasks
+  // Check cache first
+  if (!forceRefresh && dataCache.projects && dataCache.lastFetch.projects &&
+      (Date.now() - dataCache.lastFetch.projects) < CACHE_DURATION) {
+    projectsState.projects = dataCache.projects;
+    // Still need to load tasks as they're user-specific
+  }
+
+  try {
+    // Load projects if not cached
+    if (!projectsState.projects.length || forceRefresh) {
+      const projectsQuery = query(collection(db, 'projects'), limit(50));
+      const projectsSnap = await getDocs(projectsQuery);
+      projectsState.projects = projectsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      dataCache.projects = projectsState.projects;
+      dataCache.lastFetch.projects = Date.now();
+    }
+
+    // Load tasks (always user-specific, not cached)
     const tasksQuery = query(collection(db, 'tasks'), where('assignees', 'array-contains', currentUid), limit(100));
     const tasksSnap = await getDocs(tasksQuery);
     const tasks = tasksSnap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -3186,7 +3304,8 @@ async function openProjectModal() {
       showToast('Projet créé avec succès', 'success');
 
       close();
-      await loadProjectsData();
+      invalidateCache('projects');
+      await loadProjectsData(true); // Force refresh
       renderProjectsContent();
       document.querySelectorAll('.projects-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === 'liste'));
     } catch (err) {
@@ -3207,12 +3326,29 @@ const clientsState = {
   selectedId: null
 };
 
-async function loadClientsData() {
+async function loadClientsData(forceRefresh = false) {
   if (!currentUid) return;
+
+  // Check cache first
+  if (!forceRefresh && dataCache.clients && dataCache.lastFetch.clients &&
+      (Date.now() - dataCache.lastFetch.clients) < CACHE_DURATION) {
+    clientsState.clients = dataCache.clients;
+    // Update UI with cached data
+    const clientsList = document.getElementById('clients-list');
+    if (clientsList) {
+      clientsList.innerHTML = renderClientListItems(clientsState.clients);
+      const countEl = document.getElementById('clients-count');
+      if (countEl) countEl.textContent = clientsState.clients.length;
+    }
+    return;
+  }
+
   try {
     const q = query(collection(db, 'clients'), limit(100));
     const snap = await getDocs(q);
     clientsState.clients = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    dataCache.clients = clientsState.clients;
+    dataCache.lastFetch.clients = Date.now();
 
     // Update UI if on clients page
     const clientsList = document.getElementById('clients-list');
@@ -3408,7 +3544,8 @@ function renderClientDetail(clientId) {
     if (confirm(`Supprimer le client "${c.company || c.firstName + ' ' + c.lastName}" ?`)) {
       try {
         await deleteDoc(doc(db, 'clients', c.id));
-        await loadClientsData();
+        invalidateCache('clients');
+        await loadClientsData(true);
         selectedClientId = null;
         document.getElementById('client-detail').innerHTML = `<div class="client-detail-empty"><i class="fa-solid fa-user-tie"></i><p>Sélectionnez un client pour voir sa fiche</p></div>`;
         showToast('Client supprimé', 'success');
@@ -3553,7 +3690,8 @@ function openClientModal(clientId) {
       }
 
       close();
-      await loadClientsData();
+      invalidateCache('clients');
+      await loadClientsData(true);
 
       // Select the client
       document.querySelectorAll('.client-list-item').forEach(el => el.classList.toggle('active', el.dataset.clientId === selectedClientId));
@@ -3780,12 +3918,28 @@ const usersState = {
 
 let selectedUserId = null;
 
-async function loadUsersData() {
+async function loadUsersData(forceRefresh = false) {
   if (!currentUid || currentRole !== 'admin') return;
+
+  // Check cache first
+  if (!forceRefresh && dataCache.users && dataCache.lastFetch.users &&
+      (Date.now() - dataCache.lastFetch.users) < CACHE_DURATION) {
+    usersState.users = dataCache.users;
+    // Update UI with cached data
+    const usersList = document.getElementById('users-list');
+    if (usersList) {
+      usersList.innerHTML = renderUserListItems(usersState.users);
+      updateUserStats();
+    }
+    return;
+  }
+
   try {
     const q = query(collection(db, 'users'), limit(100));
     const snap = await getDocs(q);
     usersState.users = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    dataCache.users = usersState.users;
+    dataCache.lastFetch.users = Date.now();
 
     // Update UI if on users page
     const usersList = document.getElementById('users-list');
@@ -4238,7 +4392,8 @@ function openUserModal(userId) {
       }
 
       close();
-      await loadUsersData();
+      invalidateCache('users');
+      await loadUsersData(true);
       document.querySelectorAll('.users-list-item').forEach(el => el.classList.toggle('active', el.dataset.userId === selectedUserId));
       reattachUserListClicks();
       renderUserDetail(selectedUserId);
