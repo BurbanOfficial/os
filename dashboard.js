@@ -210,6 +210,24 @@ async function renderPageContent(pageName) {
       initUsersAdmin();
       break;
 
+    case 'parametres':
+      main.innerHTML = getParametresHTML();
+      await loadParametresData(currentUid);
+      initParametres();
+      break;
+
+    case 'planning':
+      main.innerHTML = getPlanningHTML();
+      await loadPlanningData(currentUid);
+      initPlanning();
+      break;
+
+    case 'documents':
+      main.innerHTML = getDocumentsHTML();
+      await loadDocumentsData(currentUid);
+      initDocuments();
+      break;
+
     default: {
       const labels = {
         clients:    'Clients',
@@ -685,6 +703,1023 @@ export function scheduleMidnightRefresh() {
     if (currentUid) loadDashboardData(currentUid);
     scheduleMidnightRefresh();
   }, midnight.getTime() - now.getTime());
+}
+
+
+/* ═══════════════════════════════════════════════════════════
+   PARAMÈTRES — TEMPLATE HTML
+═══════════════════════════════════════════════════════════ */
+
+function getParametresHTML() {
+  return `
+    <div class="page-header">
+      <div class="search-wrapper">
+        <div class="search-bar">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <input type="text" placeholder="Rechercher un paramètre…">
+        </div>
+      </div>
+      <div class="header-actions">
+        <button class="header-btn" title="Notifications">
+          <i class="fa-regular fa-bell"></i>
+        </button>
+        <button class="header-btn" title="Aide">
+          <i class="fa-regular fa-circle-question"></i>
+        </button>
+        <img
+          src="https://ui-avatars.com/api/?name=U&background=4f46e5&color=fff&size=32"
+          alt="Avatar"
+          class="header-avatar"
+          id="header-avatar"
+        >
+      </div>
+    </div>
+
+    <div class="page-body">
+      <div class="page-title-row">
+        <div>
+          <h1 class="page-title">Paramètres</h1>
+          <p class="page-subtitle">Gérez votre profil et vos préférences</p>
+        </div>
+      </div>
+
+      <div class="settings-grid">
+        <!-- Profil -->
+        <div class="card col-8">
+          <div class="card-header">
+            <span class="card-title">Profil</span>
+            <button class="btn-ghost-sm" id="edit-profile-btn">
+              <i class="fa-solid fa-pen"></i> Modifier
+            </button>
+          </div>
+          <div class="settings-profile-section" id="profile-display">
+            <div class="profile-avatar-large">
+              <img src="https://ui-avatars.com/api/?name=U&background=4f46e5&color=fff&size=80" alt="Avatar" id="settings-avatar">
+            </div>
+            <div class="profile-info">
+              <div class="profile-name" id="settings-name">—</div>
+              <div class="profile-email" id="settings-email">—</div>
+              <div class="profile-role" id="settings-role">—</div>
+            </div>
+          </div>
+          <div class="settings-profile-form" id="profile-form" style="display:none;">
+            <div class="form-group">
+              <label>Nom complet</label>
+              <input type="text" id="profile-name-input" placeholder="Prénom Nom">
+            </div>
+            <div class="form-group">
+              <label>Avatar (URL)</label>
+              <input type="text" id="profile-avatar-input" placeholder="https://...">
+            </div>
+            <div class="form-actions">
+              <button class="btn-ghost" id="cancel-profile-btn">Annuler</button>
+              <button class="btn-primary-sm" id="save-profile-btn">
+                <i class="fa-solid fa-check"></i> Enregistrer
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Statut de présence -->
+        <div class="card col-4">
+          <div class="card-header">
+            <span class="card-title">Statut de présence</span>
+          </div>
+          <div class="settings-presence">
+            <div class="presence-current">
+              <span class="presence-dot" id="settings-presence-dot"></span>
+              <span class="presence-label" id="settings-presence-label">—</span>
+            </div>
+            <div class="presence-options">
+              <button class="presence-option-btn" data-status="disponible">
+                <span class="presence-dot" style="background:#10b981;"></span>
+                Disponible
+              </button>
+              <button class="presence-option-btn" data-status="en_pause">
+                <span class="presence-dot" style="background:#f59e0b;"></span>
+                En pause
+              </button>
+              <button class="presence-option-btn" data-status="indisponible">
+                <span class="presence-dot" style="background:#ef4444;"></span>
+                Indisponible
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Notifications -->
+        <div class="card col-6">
+          <div class="card-header">
+            <span class="card-title">Notifications</span>
+          </div>
+          <div class="settings-notifications">
+            <div class="setting-item">
+              <div class="setting-info">
+                <div class="setting-label">Notifications par email</div>
+                <div class="setting-desc">Recevoir les notifications importantes par email</div>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="notif-email" checked>
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+            <div class="setting-item">
+              <div class="setting-info">
+                <div class="setting-label">Rappels de tâches</div>
+                <div class="setting-desc">Être notifié des tâches urgentes</div>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="notif-tasks" checked>
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+            <div class="setting-item">
+              <div class="setting-info">
+                <div class="setting-label">Rappels de rendez-vous</div>
+                <div class="setting-desc">Être notifié des rendez-vous à venir</div>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="notif-rdv" checked>
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+            <div class="setting-item">
+              <div class="setting-info">
+                <div class="setting-label">Mises à jour de projets</div>
+                <div class="setting-desc">Être notifié des changements sur les projets</div>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="notif-projects" checked>
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sécurité -->
+        <div class="card col-6">
+          <div class="card-header">
+            <span class="card-title">Sécurité</span>
+          </div>
+          <div class="settings-security">
+            <div class="setting-item">
+              <div class="setting-info">
+                <div class="setting-label">Changer le mot de passe</div>
+                <div class="setting-desc">Mettre à jour votre mot de passe</div>
+              </div>
+              <button class="btn-ghost-sm" id="change-password-btn">
+                <i class="fa-solid fa-key"></i> Changer
+              </button>
+            </div>
+            <div class="setting-item">
+              <div class="setting-info">
+                <div class="setting-label">Dernière connexion</div>
+                <div class="setting-desc" id="last-login">—</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Actions de compte -->
+        <div class="card col-12">
+          <div class="card-header">
+            <span class="card-title">Actions de compte</span>
+          </div>
+          <div class="settings-account-actions">
+            <button class="btn-danger" id="signout-btn">
+              <i class="fa-solid fa-right-from-bracket"></i> Se déconnecter
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+
+/* ═══════════════════════════════════════════════════════════
+   PARAMÈTRES — DONNÉES & FONCTIONNALITÉS
+═══════════════════════════════════════════════════════════ */
+
+async function loadParametresData(uid) {
+  if (!uid) return;
+
+  try {
+    // Charger le profil utilisateur
+    const snap = await getDoc(doc(db, 'users', uid));
+    if (snap.exists()) {
+      const profile = snap.data();
+
+      // Mettre à jour l'affichage du profil
+      const nameEl = document.getElementById('settings-name');
+      const emailEl = document.getElementById('settings-email');
+      const roleEl = document.getElementById('settings-role');
+      const avatarEl = document.getElementById('settings-avatar');
+      const headerAvatar = document.getElementById('header-avatar');
+
+      if (nameEl && profile.displayName) {
+        nameEl.textContent = profile.displayName;
+      }
+      if (emailEl && profile.email) {
+        emailEl.textContent = profile.email;
+      }
+      if (roleEl) {
+        roleEl.textContent = profile.role === 'admin' ? 'Administrateur' : 'Employé';
+      }
+      if (avatarEl) {
+        avatarEl.src = profile.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(profile.displayName || 'U')}&background=4f46e5&color=fff&size=80`;
+      }
+      if (headerAvatar) {
+        headerAvatar.src = profile.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(profile.displayName || 'U')}&background=4f46e5&color=fff&size=32`;
+      }
+
+      // Charger les préférences de notification
+      if (profile.preferences) {
+        const notifEmail = document.getElementById('notif-email');
+        const notifTasks = document.getElementById('notif-tasks');
+        const notifRdv = document.getElementById('notif-rdv');
+        const notifProjects = document.getElementById('notif-projects');
+
+        if (notifEmail) notifEmail.checked = profile.preferences.email !== false;
+        if (notifTasks) notifTasks.checked = profile.preferences.tasks !== false;
+        if (notifRdv) notifRdv.checked = profile.preferences.rdv !== false;
+        if (notifProjects) notifProjects.checked = profile.preferences.projects !== false;
+      }
+    }
+
+    // Charger le statut de présence
+    const presenceSnap = await getDoc(doc(db, 'presence', uid));
+    if (presenceSnap.exists()) {
+      const { status } = presenceSnap.data();
+      applySettingsPresenceUI(status);
+    }
+
+    // Afficher la dernière connexion (simulée pour l'instant)
+    const lastLoginEl = document.getElementById('last-login');
+    if (lastLoginEl) {
+      lastLoginEl.textContent = 'Aujourd\'hui à ' + new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+    }
+  } catch (err) {
+    console.warn('loadParametresData:', err);
+  }
+}
+
+function applySettingsPresenceUI(status) {
+  const dot = document.getElementById('settings-presence-dot');
+  const label = document.getElementById('settings-presence-label');
+  if (dot) dot.style.background = getStatusColor(status);
+  if (label) label.textContent = getStatusLabel(status);
+}
+
+function initParametres() {
+  // Bouton modifier le profil
+  const editProfileBtn = document.getElementById('edit-profile-btn');
+  const cancelProfileBtn = document.getElementById('cancel-profile-btn');
+  const saveProfileBtn = document.getElementById('save-profile-btn');
+  const profileDisplay = document.getElementById('profile-display');
+  const profileForm = document.getElementById('profile-form');
+
+  if (editProfileBtn) {
+    editProfileBtn.addEventListener('click', () => {
+      if (profileDisplay) profileDisplay.style.display = 'none';
+      if (profileForm) profileForm.style.display = 'block';
+
+      // Pré-remplir le formulaire
+      const nameInput = document.getElementById('profile-name-input');
+      const avatarInput = document.getElementById('profile-avatar-input');
+      const currentName = document.getElementById('settings-name');
+      const currentAvatar = document.getElementById('settings-avatar');
+
+      if (nameInput && currentName) nameInput.value = currentName.textContent;
+      if (avatarInput && currentAvatar) avatarInput.value = currentAvatar.src;
+    });
+  }
+
+  if (cancelProfileBtn) {
+    cancelProfileBtn.addEventListener('click', () => {
+      if (profileDisplay) profileDisplay.style.display = 'flex';
+      if (profileForm) profileForm.style.display = 'none';
+    });
+  }
+
+  if (saveProfileBtn) {
+    saveProfileBtn.addEventListener('click', async () => {
+      const nameInput = document.getElementById('profile-name-input');
+      const avatarInput = document.getElementById('profile-avatar-input');
+
+      if (!nameInput || !nameInput.value.trim()) {
+        alert('Le nom est requis');
+        return;
+      }
+
+      try {
+        await updateDoc(doc(db, 'users', currentUid), {
+          displayName: nameInput.value.trim(),
+          photoURL: avatarInput?.value.trim() || null,
+          updatedAt: serverTimestamp()
+        });
+
+        // Recharger les données
+        await loadParametresData(currentUid);
+
+        // Revenir à l'affichage
+        if (profileDisplay) profileDisplay.style.display = 'flex';
+        if (profileForm) profileForm.style.display = 'none';
+
+        // Mettre à jour la sidebar
+        const sidebarName = document.getElementById('user-name');
+        const sidebarAvatar = document.getElementById('user-avatar-img');
+        if (sidebarName) sidebarName.textContent = nameInput.value.trim();
+        if (sidebarAvatar && avatarInput?.value.trim()) {
+          sidebarAvatar.src = avatarInput.value.trim();
+        }
+      } catch (err) {
+        console.error('Erreur lors de la sauvegarde du profil:', err);
+        alert('Erreur lors de la sauvegarde du profil');
+      }
+    });
+  }
+
+  // Options de présence
+  document.querySelectorAll('.presence-option-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const status = btn.dataset.status;
+      await updatePresenceStatus(status);
+      applySettingsPresenceUI(status);
+    });
+  });
+
+  // Notifications
+  const notifEmail = document.getElementById('notif-email');
+  const notifTasks = document.getElementById('notif-tasks');
+  const notifRdv = document.getElementById('notif-rdv');
+  const notifProjects = document.getElementById('notif-projects');
+
+  const saveNotificationPreferences = async () => {
+    try {
+      await updateDoc(doc(db, 'users', currentUid), {
+        'preferences.email': notifEmail?.checked,
+        'preferences.tasks': notifTasks?.checked,
+        'preferences.rdv': notifRdv?.checked,
+        'preferences.projects': notifProjects?.checked,
+        updatedAt: serverTimestamp()
+      });
+    } catch (err) {
+      console.warn('Erreur lors de la sauvegarde des préférences:', err);
+    }
+  };
+
+  if (notifEmail) notifEmail.addEventListener('change', saveNotificationPreferences);
+  if (notifTasks) notifTasks.addEventListener('change', saveNotificationPreferences);
+  if (notifRdv) notifRdv.addEventListener('change', saveNotificationPreferences);
+  if (notifProjects) notifProjects.addEventListener('change', saveNotificationPreferences);
+
+  // Bouton changer mot de passe
+  const changePasswordBtn = document.getElementById('change-password-btn');
+  if (changePasswordBtn) {
+    changePasswordBtn.addEventListener('click', () => {
+      alert('La fonctionnalité de changement de mot de passe sera bientôt disponible.');
+    });
+  }
+
+  // Bouton déconnexion
+  const signoutBtn = document.getElementById('signout-btn');
+  if (signoutBtn) {
+    signoutBtn.addEventListener('click', async () => {
+      if (confirm('Êtes-vous sûr de vouloir vous déconnecter ?')) {
+        try {
+          await signOut(auth);
+          window.location.replace('operating-system.html');
+        } catch (err) {
+          console.error('Erreur lors de la déconnexion:', err);
+          alert('Erreur lors de la déconnexion');
+        }
+      }
+    });
+  }
+}
+
+
+/* ═══════════════════════════════════════════════════════════
+   PLANNING — TEMPLATE HTML
+═══════════════════════════════════════════════════════════ */
+
+function getPlanningHTML() {
+  const today = new Date();
+  const dateStr = today.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const dateCap = dateStr.charAt(0).toUpperCase() + dateStr.slice(1);
+
+  return `
+    <div class="page-header">
+      <div class="search-wrapper">
+        <div class="search-bar">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <input type="text" placeholder="Rechercher un rendez-vous…">
+        </div>
+      </div>
+      <div class="header-actions">
+        <button class="header-btn" title="Notifications">
+          <i class="fa-regular fa-bell"></i>
+        </button>
+        <button class="header-btn" title="Aide">
+          <i class="fa-regular fa-circle-question"></i>
+        </button>
+        <img
+          src="https://ui-avatars.com/api/?name=U&background=4f46e5&color=fff&size=32"
+          alt="Avatar"
+          class="header-avatar"
+          id="header-avatar"
+        >
+      </div>
+    </div>
+
+    <div class="page-body">
+      <div class="page-title-row">
+        <div>
+          <h1 class="page-title">Planning</h1>
+          <p class="page-subtitle">Gérez vos rendez-vous et votre agenda</p>
+        </div>
+        <div class="page-date">
+          <i class="fa-regular fa-calendar"></i>
+          ${dateCap}
+        </div>
+      </div>
+
+      <div class="planning-grid">
+        <!-- Calendrier -->
+        <div class="card col-8">
+          <div class="card-header">
+            <span class="card-title">Calendrier</span>
+            <button class="btn-primary-sm" id="add-rdv-btn">
+              <i class="fa-solid fa-plus"></i> Nouveau RDV
+            </button>
+          </div>
+          <div class="planning-calendar" id="planning-calendar">
+            <div class="calendar-header">
+              <button class="calendar-nav" id="calendar-prev"><i class="fa-solid fa-chevron-left"></i></button>
+              <span class="calendar-title" id="calendar-title">Juin 2026</span>
+              <button class="calendar-nav" id="calendar-next"><i class="fa-solid fa-chevron-right"></i></button>
+            </div>
+            <div class="calendar-grid" id="calendar-grid">
+              <div class="calendar-day-header">Lun</div>
+              <div class="calendar-day-header">Mar</div>
+              <div class="calendar-day-header">Mer</div>
+              <div class="calendar-day-header">Jeu</div>
+              <div class="calendar-day-header">Ven</div>
+              <div class="calendar-day-header">Sam</div>
+              <div class="calendar-day-header">Dim</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Rendez-vous du jour -->
+        <div class="card col-4">
+          <div class="card-header">
+            <span class="card-title">Rendez-vous du jour</span>
+          </div>
+          <div class="planning-today" id="planning-today">
+            <div class="empty-state">
+              <i class="fa-regular fa-calendar-check"></i>
+              <p>Aucun rendez-vous aujourd'hui</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Liste des rendez-vous à venir -->
+        <div class="card col-12">
+          <div class="card-header">
+            <span class="card-title">Rendez-vous à venir</span>
+            <div class="card-filters">
+              <button class="filter-btn active" data-filter="all">Tous</button>
+              <button class="filter-btn" data-filter="today">Aujourd'hui</button>
+              <button class="filter-btn" data-filter="week">Cette semaine</button>
+            </div>
+          </div>
+          <div class="planning-list" id="planning-list">
+            <div class="empty-state">
+              <i class="fa-regular fa-calendar"></i>
+              <p>Aucun rendez-vous à venir</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+
+/* ═══════════════════════════════════════════════════════════
+   PLANNING — DONNÉES & FONCTIONNALITÉS
+═══════════════════════════════════════════════════════════ */
+
+async function loadPlanningData(uid) {
+  if (!uid) return;
+
+  try {
+    // Charger les rendez-vous depuis Firestore
+    const q = query(
+      collection(db, 'appointments'),
+      where('attendees', 'array-contains', uid),
+      where('date', '>=', new Date()),
+      limit(50)
+    );
+    const snap = await getDocs(q);
+    const appointments = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    renderPlanningCalendar(new Date(), appointments);
+    renderPlanningToday(appointments);
+    renderPlanningList(appointments);
+  } catch (err) {
+    console.warn('loadPlanningData:', err);
+  }
+}
+
+function renderPlanningCalendar(date, appointments) {
+  const grid = document.getElementById('calendar-grid');
+  const title = document.getElementById('calendar-title');
+  if (!grid || !title) return;
+
+  const year = date.getFullYear();
+  const month = date.getMonth();
+  const monthNames = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+  title.textContent = `${monthNames[month]} ${year}`;
+
+  // Premier jour du mois
+  const firstDay = new Date(year, month, 1);
+  const startingDay = firstDay.getDay() === 0 ? 6 : firstDay.getDay() - 1; // Lundi = 0
+
+  // Nombre de jours dans le mois
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  // Générer les jours
+  let html = `
+    <div class="calendar-day-header">Lun</div>
+    <div class="calendar-day-header">Mar</div>
+    <div class="calendar-day-header">Mer</div>
+    <div class="calendar-day-header">Jeu</div>
+    <div class="calendar-day-header">Ven</div>
+    <div class="calendar-day-header">Sam</div>
+    <div class="calendar-day-header">Dim</div>
+  `;
+
+  // Jours vides avant le premier jour
+  for (let i = 0; i < startingDay; i++) {
+    html += '<div class="calendar-day empty"></div>';
+  }
+
+  // Jours du mois
+  const today = new Date();
+  for (let day = 1; day <= daysInMonth; day++) {
+    const currentDate = new Date(year, month, day);
+    const isToday = currentDate.toDateString() === today.toDateString();
+    const hasAppointment = appointments.some(app => {
+      const appDate = app.date?.toDate ? app.date.toDate() : new Date(app.date);
+      return appDate.toDateString() === currentDate.toDateString();
+    });
+
+    html += `
+      <div class="calendar-day ${isToday ? 'today' : ''} ${hasAppointment ? 'has-event' : ''}" data-date="${currentDate.toISOString()}">
+        <span class="calendar-day-number">${day}</span>
+        ${hasAppointment ? '<span class="calendar-event-dot"></span>' : ''}
+      </div>
+    `;
+  }
+
+  grid.innerHTML = html;
+}
+
+function renderPlanningToday(appointments) {
+  const container = document.getElementById('planning-today');
+  if (!container) return;
+
+  const today = new Date();
+  const todayAppointments = appointments.filter(app => {
+    const appDate = app.date?.toDate ? app.date.toDate() : new Date(app.date);
+    return appDate.toDateString() === today.toDateString();
+  }).sort((a, b) => {
+    const dateA = a.date?.toDate ? a.date.toDate() : new Date(a.date);
+    const dateB = b.date?.toDate ? b.date.toDate() : new Date(b.date);
+    return dateA - dateB;
+  });
+
+  if (todayAppointments.length === 0) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <i class="fa-regular fa-calendar-check"></i>
+        <p>Aucun rendez-vous aujourd'hui</p>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = todayAppointments.map(app => {
+    const date = app.date?.toDate ? app.date.toDate() : new Date(app.date);
+    const timeStr = date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+    return `
+      <div class="planning-rdv-item">
+        <div class="rdv-time">${timeStr}</div>
+        <div class="rdv-info">
+          <div class="rdv-title">${escapeHtml(app.title ?? 'RDV')}</div>
+          ${app.location ? `<div class="rdv-location"><i class="fa-solid fa-location-dot"></i> ${escapeHtml(app.location)}</div>` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderPlanningList(appointments) {
+  const container = document.getElementById('planning-list');
+  if (!container) return;
+
+  if (appointments.length === 0) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <i class="fa-regular fa-calendar"></i>
+        <p>Aucun rendez-vous à venir</p>
+      </div>
+    `;
+    return;
+  }
+
+  const sorted = [...appointments].sort((a, b) => {
+    const dateA = a.date?.toDate ? a.date.toDate() : new Date(a.date);
+    const dateB = b.date?.toDate ? b.date.toDate() : new Date(b.date);
+    return dateA - dateB;
+  });
+
+  container.innerHTML = sorted.map(app => {
+    const date = app.date?.toDate ? app.date.toDate() : new Date(app.date);
+    const timeStr = date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+    const dateStr = date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+    return `
+      <div class="planning-list-item">
+        <div class="rdv-date-block">
+          <span class="rdv-day">${dateStr}</span>
+          <span class="rdv-time">${timeStr}</span>
+        </div>
+        <div class="rdv-body">
+          <div class="rdv-title">${escapeHtml(app.title ?? 'RDV')}</div>
+          ${app.location ? `<div class="rdv-location"><i class="fa-solid fa-location-dot"></i> ${escapeHtml(app.location)}</div>` : ''}
+          ${app.description ? `<div class="rdv-desc">${escapeHtml(app.description)}</div>` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function initPlanning() {
+  // Navigation calendrier
+  const prevBtn = document.getElementById('calendar-prev');
+  const nextBtn = document.getElementById('calendar-next');
+  let currentDate = new Date();
+
+  if (prevBtn) {
+    prevBtn.addEventListener('click', async () => {
+      currentDate.setMonth(currentDate.getMonth() - 1);
+      await loadPlanningData(currentUid);
+    });
+  }
+
+  if (nextBtn) {
+    nextBtn.addEventListener('click', async () => {
+      currentDate.setMonth(currentDate.getMonth() + 1);
+      await loadPlanningData(currentUid);
+    });
+  }
+
+  // Bouton nouveau RDV
+  const addRdvBtn = document.getElementById('add-rdv-btn');
+  if (addRdvBtn) {
+    addRdvBtn.addEventListener('click', () => {
+      alert('La fonctionnalité de création de rendez-vous sera bientôt disponible.');
+    });
+  }
+
+  // Filtres
+  document.querySelectorAll('.filter-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      // Logique de filtrage à implémenter
+    });
+  });
+}
+
+
+/* ═══════════════════════════════════════════════════════════
+   DOCUMENTS — TEMPLATE HTML
+═══════════════════════════════════════════════════════════ */
+
+function getDocumentsHTML() {
+  return `
+    <div class="page-header">
+      <div class="search-wrapper">
+        <div class="search-bar">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <input type="text" id="docs-search-input" placeholder="Rechercher un document…">
+        </div>
+      </div>
+      <div class="header-actions">
+        <button class="header-btn" title="Notifications">
+          <i class="fa-regular fa-bell"></i>
+        </button>
+        <button class="header-btn" title="Aide">
+          <i class="fa-regular fa-circle-question"></i>
+        </button>
+        <img
+          src="https://ui-avatars.com/api/?name=U&background=4f46e5&color=fff&size=32"
+          alt="Avatar"
+          class="header-avatar"
+          id="header-avatar"
+        >
+      </div>
+    </div>
+
+    <div class="page-body">
+      <div class="page-title-row">
+        <div>
+          <h1 class="page-title">Documents</h1>
+          <p class="page-subtitle">Gérez vos fichiers et ressources</p>
+        </div>
+        <button class="btn-primary-sm" id="upload-doc-btn">
+          <i class="fa-solid fa-cloud-arrow-up"></i> Téléverser
+        </button>
+      </div>
+
+      <div class="documents-grid">
+        <!-- Statistiques -->
+        <div class="card col-3">
+          <div class="card-header">
+            <span class="card-title">Statistiques</span>
+          </div>
+          <div class="docs-stats">
+            <div class="stat-item">
+              <span class="stat-value" id="docs-total">0</span>
+              <span class="stat-label">Documents</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-value" id="docs-size">0 MB</span>
+              <span class="stat-label">Espace utilisé</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Dossiers récents -->
+        <div class="card col-5">
+          <div class="card-header">
+            <span class="card-title">Dossiers</span>
+            <button class="btn-ghost-sm" id="new-folder-btn">
+              <i class="fa-solid fa-folder-plus"></i> Nouveau
+            </button>
+          </div>
+          <div class="docs-folders" id="docs-folders">
+            <div class="empty-state">
+              <i class="fa-regular fa-folder"></i>
+              <p>Aucun dossier</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Fichiers récents -->
+        <div class="card col-4">
+          <div class="card-header">
+            <span class="card-title">Récents</span>
+          </div>
+          <div class="docs-recent" id="docs-recent">
+            <div class="empty-state">
+              <i class="fa-regular fa-file"></i>
+              <p>Aucun fichier récent</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Liste complète des documents -->
+        <div class="card col-12">
+          <div class="card-header">
+            <span class="card-title">Tous les documents</span>
+            <div class="card-filters">
+              <button class="filter-btn active" data-filter="all">Tous</button>
+              <button class="filter-btn" data-filter="images">Images</button>
+              <button class="filter-btn" data-filter="pdf">PDF</button>
+              <button class="filter-btn" data-filter="docs">Documents</button>
+            </div>
+          </div>
+          <div class="docs-list" id="docs-list">
+            <div class="empty-state">
+              <i class="fa-regular fa-folder-open"></i>
+              <p>Aucun document</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+
+/* ═══════════════════════════════════════════════════════════
+   DOCUMENTS — DONNÉES & FONCTIONNALITÉS
+═══════════════════════════════════════════════════════════ */
+
+async function loadDocumentsData(uid) {
+  if (!uid) return;
+
+  try {
+    // Charger les documents depuis Firestore
+    const q = query(collection(db, 'documents'), limit(100));
+    const snap = await getDocs(q);
+    const documents = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    renderDocumentsStats(documents);
+    renderDocumentsFolders(documents);
+    renderDocumentsRecent(documents);
+    renderDocumentsList(documents);
+  } catch (err) {
+    console.warn('loadDocumentsData:', err);
+  }
+}
+
+function renderDocumentsStats(documents) {
+  const totalEl = document.getElementById('docs-total');
+  const sizeEl = document.getElementById('docs-size');
+
+  if (totalEl) totalEl.textContent = documents.length;
+
+  // Calculer la taille totale (simulée)
+  const totalSize = documents.reduce((acc, doc) => acc + (doc.size || 0), 0);
+  const sizeMB = (totalSize / (1024 * 1024)).toFixed(2);
+  if (sizeEl) sizeEl.textContent = `${sizeMB} MB`;
+}
+
+function renderDocumentsFolders(documents) {
+  const container = document.getElementById('docs-folders');
+  if (!container) return;
+
+  // Grouper par dossier
+  const folders = {};
+  documents.forEach(doc => {
+    const folder = doc.folder || 'Racine';
+    if (!folders[folder]) folders[folder] = [];
+    folders[folder].push(doc);
+  });
+
+  const folderNames = Object.keys(folders);
+  if (folderNames.length === 0) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <i class="fa-regular fa-folder"></i>
+        <p>Aucun dossier</p>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = folderNames.map(folder => {
+    const count = folders[folder].length;
+    return `
+      <div class="docs-folder-item">
+        <div class="folder-icon">
+          <i class="fa-solid fa-folder"></i>
+        </div>
+        <div class="folder-info">
+          <div class="folder-name">${escapeHtml(folder)}</div>
+          <div class="folder-count">${count} fichier${count > 1 ? 's' : ''}</div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderDocumentsRecent(documents) {
+  const container = document.getElementById('docs-recent');
+  if (!container) return;
+
+  const recent = [...documents]
+    .sort((a, b) => {
+      const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt || 0);
+      const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt || 0);
+      return dateB - dateA;
+    })
+    .slice(0, 5);
+
+  if (recent.length === 0) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <i class="fa-regular fa-file"></i>
+        <p>Aucun fichier récent</p>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = recent.map(doc => {
+    const icon = getFileIcon(doc.type);
+    const date = doc.createdAt?.toDate ? doc.createdAt.toDate() : new Date(doc.createdAt || 0);
+    const dateStr = date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+    return `
+      <div class="docs-recent-item">
+        <div class="file-icon">${icon}</div>
+        <div class="file-info">
+          <div class="file-name">${escapeHtml(doc.name)}</div>
+          <div class="file-meta">${dateStr}</div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderDocumentsList(documents) {
+  const container = document.getElementById('docs-list');
+  if (!container) return;
+
+  if (documents.length === 0) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <i class="fa-regular fa-folder-open"></i>
+        <p>Aucun document</p>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = documents.map(doc => {
+    const icon = getFileIcon(doc.type);
+    const date = doc.createdAt?.toDate ? doc.createdAt.toDate() : new Date(doc.createdAt || 0);
+    const dateStr = date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+    const size = formatFileSize(doc.size || 0);
+    return `
+      <div class="docs-list-item">
+        <div class="file-icon">${icon}</div>
+        <div class="file-info">
+          <div class="file-name">${escapeHtml(doc.name)}</div>
+          <div class="file-meta">${dateStr} • ${size}</div>
+        </div>
+        <div class="file-actions">
+          <button class="file-action-btn" title="Télécharger">
+            <i class="fa-solid fa-download"></i>
+          </button>
+          <button class="file-action-btn" title="Supprimer">
+            <i class="fa-solid fa-trash"></i>
+          </button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function getFileIcon(type) {
+  const icons = {
+    'pdf': '<i class="fa-solid fa-file-pdf" style="color:#ef4444;"></i>',
+    'image': '<i class="fa-solid fa-file-image" style="color:#3b82f6;"></i>',
+    'word': '<i class="fa-solid fa-file-word" style="color:#2563eb;"></i>',
+    'excel': '<i class="fa-solid fa-file-excel" style="color:#10b981;"></i>',
+    'default': '<i class="fa-solid fa-file" style="color:#6b7280;"></i>'
+  };
+  return icons[type] || icons['default'];
+}
+
+function formatFileSize(bytes) {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+function initDocuments() {
+  // Bouton téléverser
+  const uploadBtn = document.getElementById('upload-doc-btn');
+  if (uploadBtn) {
+    uploadBtn.addEventListener('click', () => {
+      alert('La fonctionnalité de téléversement sera bientôt disponible.');
+    });
+  }
+
+  // Bouton nouveau dossier
+  const newFolderBtn = document.getElementById('new-folder-btn');
+  if (newFolderBtn) {
+    newFolderBtn.addEventListener('click', () => {
+      alert('La fonctionnalité de création de dossier sera bientôt disponible.');
+    });
+  }
+
+  // Recherche
+  const searchInput = document.getElementById('docs-search-input');
+  if (searchInput) {
+    searchInput.addEventListener('input', debounce(async (e) => {
+      const query = e.target.value.toLowerCase();
+      // Logique de recherche à implémenter
+    }, 300));
+  }
+
+  // Filtres
+  document.querySelectorAll('.filter-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      // Logique de filtrage à implémenter
+    });
+  });
 }
 
 
