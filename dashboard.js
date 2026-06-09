@@ -39,7 +39,26 @@ const app  = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db   = getFirestore(app);
 
-let currentUid = null;
+let currentUid  = null;
+let currentRole = 'employee'; // 'admin' | 'employee'
+
+// Sections de l'app et leurs permissions
+const SECTIONS = [
+  { key: 'dashboard',   label: 'Dashboard',   icon: 'fa-chart-pie' },
+  { key: 'clients',     label: 'Clients',      icon: 'fa-users' },
+  { key: 'projets',     label: 'Projets',      icon: 'fa-folder-open' },
+  { key: 'messagerie',  label: 'Messagerie',   icon: 'fa-comment-dots' },
+  { key: 'planning',    label: 'Planning',     icon: 'fa-calendar-days' },
+  { key: 'documents',   label: 'Documents',    icon: 'fa-file-lines' },
+  { key: 'parametres',  label: 'Paramètres',   icon: 'fa-gear' },
+];
+
+const PERMISSIONS = [
+  { key: 'view',   label: 'Lecture',      desc: 'Voir le contenu de la section' },
+  { key: 'edit',   label: 'Modification', desc: 'Créer et modifier des éléments' },
+  { key: 'delete', label: 'Suppression',  desc: 'Supprimer des éléments' },
+  { key: 'export', label: 'Export',       desc: 'Exporter des données' },
+];
 
 // ── Vérification de session au chargement ─────────────────────────────────────
 onAuthStateChanged(auth, async (user) => {
@@ -87,11 +106,16 @@ async function loadInitialData(uid) {
 
       if (nameEl && profile.displayName) {
         nameEl.textContent = profile.displayName;
-        // Mettre à jour l'avatar génératif avec les initiales
         const initials = profile.displayName.split(' ').map(n => n[0]).join('').toUpperCase();
         if (avatarEl) {
           avatarEl.src = profile.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(initials)}&background=4f46e5&color=fff&size=40`;
         }
+      }
+
+      // Stocker le rôle et afficher le menu admin si nécessaire
+      currentRole = profile.role ?? 'employee';
+      if (currentRole === 'admin') {
+        injectAdminNavItem();
       }
     }
 
@@ -111,6 +135,28 @@ async function loadInitialData(uid) {
 
   // Charger le dashboard
   await renderPageContent('dashboard');
+}
+
+function injectAdminNavItem() {
+  const nav = document.getElementById('main-nav');
+  if (!nav || nav.querySelector('[data-target="utilisateurs"]')) return;
+
+  // Ajouter un séparateur "Administration" s'il n'existe pas
+  const adminSection = document.createElement('span');
+  adminSection.className = 'nav-section-label';
+  adminSection.textContent = 'Administration';
+
+  const adminItem = document.createElement('a');
+  adminItem.href = '#';
+  adminItem.className = 'menu-item admin-only';
+  adminItem.dataset.target = 'utilisateurs';
+  adminItem.innerHTML = `
+    <i class="fa-solid fa-shield-halved"></i>
+    <span class="nav-label">Utilisateurs</span>
+  `;
+
+  nav.appendChild(adminSection);
+  nav.appendChild(adminItem);
 }
 
 
@@ -152,6 +198,16 @@ async function renderPageContent(pageName) {
     case 'messagerie':
       main.innerHTML = getMessagerieHTML();
       initMessagerie();
+      break;
+
+    case 'utilisateurs':
+      if (currentRole !== 'admin') {
+        main.innerHTML = `<div class="page-body"><div class="section-placeholder"><i class="fa-solid fa-lock"></i><p>Accès réservé aux administrateurs.</p></div></div>`;
+        main.style.opacity = '1';
+        return;
+      }
+      main.innerHTML = getUsersAdminHTML();
+      initUsersAdmin();
       break;
 
     default: {
@@ -1765,6 +1821,477 @@ function initMessagerie() {
 
   // Ouvrir la première conversation
   if (DEMO_CONVS.length > 0) openConversation(DEMO_CONVS[0].id);
+}
+
+
+/* ═══════════════════════════════════════════════════════════
+   SECTION UTILISATEURS (ADMIN)
+═══════════════════════════════════════════════════════════ */
+
+// Données démo utilisateurs avec permissions par section
+const DEMO_USERS = [
+  {
+    id: 'usr1', displayName: 'Lucas Martin',    email: 'lucas.martin@agora.fr',    role: 'admin',
+    status: 'disponible', createdAt: '2026-01-10',
+    permissions: { dashboard: ['view','edit'], clients: ['view','edit','delete','export'], projets: ['view','edit','delete','export'], messagerie: ['view','edit'], planning: ['view','edit','delete'], documents: ['view','edit','delete','export'], parametres: ['view','edit'] },
+  },
+  {
+    id: 'usr2', displayName: 'Camille Bernard', email: 'camille.bernard@agora.fr',  role: 'employee',
+    status: 'disponible', createdAt: '2026-02-03',
+    permissions: { dashboard: ['view'], clients: ['view','edit'], projets: ['view','edit'], messagerie: ['view','edit'], planning: ['view','edit'], documents: ['view','edit'], parametres: ['view'] },
+  },
+  {
+    id: 'usr3', displayName: 'Antoine Dubois',  email: 'antoine.dubois@agora.fr',  role: 'employee',
+    status: 'en_pause',  createdAt: '2026-02-15',
+    permissions: { dashboard: ['view'], clients: ['view'], projets: ['view','edit'], messagerie: ['view','edit'], planning: ['view'], documents: ['view','edit'], parametres: ['view'] },
+  },
+  {
+    id: 'usr4', displayName: 'Marie Lambert',   email: 'marie.lambert@agora.fr',   role: 'employee',
+    status: 'indisponible', createdAt: '2026-03-01',
+    permissions: { dashboard: ['view'], clients: ['view','edit','export'], projets: ['view','edit','export'], messagerie: ['view','edit'], planning: ['view','edit'], documents: ['view'], parametres: ['view'] },
+  },
+  {
+    id: 'usr5', displayName: 'Julie Chen',      email: 'julie.chen@agora.fr',      role: 'employee',
+    status: 'disponible', createdAt: '2026-04-20',
+    permissions: { dashboard: ['view'], clients: ['view'], projets: ['view'], messagerie: ['view','edit'], planning: ['view'], documents: ['view'], parametres: ['view'] },
+  },
+];
+
+let selectedUserId = null;
+
+// ── HTML principal ───────────────────────────────────────────────────────────
+
+function getUsersAdminHTML() {
+  const adminCount    = DEMO_USERS.filter(u => u.role === 'admin').length;
+  const employeeCount = DEMO_USERS.filter(u => u.role === 'employee').length;
+
+  return `
+    <div class="page-header">
+      <div class="search-wrapper">
+        <div class="search-bar">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <input type="text" id="users-search-input" placeholder="Rechercher un utilisateur…">
+        </div>
+      </div>
+      <div class="header-actions">
+        <button class="header-btn"><i class="fa-regular fa-bell"></i><span class="notif-dot"></span></button>
+        <img src="https://ui-avatars.com/api/?name=U&background=4f46e5&color=fff&size=32" class="header-avatar">
+      </div>
+    </div>
+
+    <div class="users-admin-layout">
+
+      <!-- Colonne gauche : liste -->
+      <div class="users-admin-sidebar">
+        <div class="users-admin-sidebar-header">
+          <span class="users-admin-title">Utilisateurs</span>
+          <button class="btn-icon" id="btn-new-user" title="Nouvel utilisateur">
+            <i class="fa-solid fa-plus"></i>
+          </button>
+        </div>
+
+        <!-- Résumé -->
+        <div class="users-admin-stats">
+          <div class="users-stat-pill">
+            <span class="users-stat-num">${DEMO_USERS.length}</span>
+            <span class="users-stat-label">Total</span>
+          </div>
+          <div class="users-stat-pill accent">
+            <span class="users-stat-num">${adminCount}</span>
+            <span class="users-stat-label">Admins</span>
+          </div>
+          <div class="users-stat-pill">
+            <span class="users-stat-num">${employeeCount}</span>
+            <span class="users-stat-label">Employés</span>
+          </div>
+        </div>
+
+        <div class="users-list" id="users-list">
+          ${renderUserListItems(DEMO_USERS)}
+        </div>
+      </div>
+
+      <!-- Colonne droite : fiche + permissions -->
+      <div class="users-admin-detail" id="users-admin-detail">
+        <div class="client-detail-empty">
+          <i class="fa-solid fa-shield-halved"></i>
+          <p>Sélectionnez un utilisateur pour gérer ses accès</p>
+        </div>
+      </div>
+
+    </div>
+  `;
+}
+
+// ── Liste utilisateurs ───────────────────────────────────────────────────────
+
+function renderUserListItems(users) {
+  const statusColor = s => ({ disponible: '#10b981', en_pause: '#f59e0b', indisponible: '#ef4444' }[s] ?? '#94a3b8');
+  return users.map(u => `
+    <div class="users-list-item ${u.id === selectedUserId ? 'active' : ''}" data-user-id="${u.id}">
+      <div class="users-list-avatar" style="background:${roleColor(u.role)}20; color:${roleColor(u.role)};">
+        ${u.displayName.split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase()}
+        <span class="users-list-dot" style="background:${statusColor(u.status)};"></span>
+      </div>
+      <div class="users-list-info">
+        <p class="users-list-name">${escapeHtml(u.displayName)}</p>
+        <p class="users-list-sub">${escapeHtml(u.email)}</p>
+      </div>
+      <span class="role-pill ${u.role}">${u.role === 'admin' ? 'Admin' : 'Employé'}</span>
+    </div>
+  `).join('');
+}
+
+function roleColor(role) {
+  return role === 'admin' ? '#4f46e5' : '#10b981';
+}
+
+// ── Fiche utilisateur + permissions ─────────────────────────────────────────
+
+function renderUserDetail(userId) {
+  const u = DEMO_USERS.find(x => x.id === userId);
+  if (!u) return;
+
+  const statusColor = { disponible: '#10b981', en_pause: '#f59e0b', indisponible: '#ef4444' }[u.status] ?? '#94a3b8';
+  const statusLabel = { disponible: 'Disponible', en_pause: 'En pause', indisponible: 'Indisponible' }[u.status] ?? u.status;
+
+  // Tableau des permissions par section
+  const permRows = SECTIONS.map(sec => {
+    const userPerms = u.permissions[sec.key] ?? [];
+    const cells = PERMISSIONS.map(perm => {
+      const checked = userPerms.includes(perm.key);
+      // L'admin a tout, lecture seule sur ses propres permissions
+      const isDisabled = u.role === 'admin' ? 'disabled' : '';
+      return `
+        <td class="perm-cell">
+          <label class="perm-toggle ${isDisabled ? 'disabled' : ''}">
+            <input
+              type="checkbox"
+              class="perm-checkbox"
+              data-user-id="${u.id}"
+              data-section="${sec.key}"
+              data-perm="${perm.key}"
+              ${checked ? 'checked' : ''}
+              ${isDisabled}
+            >
+            <span class="perm-toggle-track"></span>
+          </label>
+        </td>`;
+    }).join('');
+    return `
+      <tr class="perm-row">
+        <td class="perm-section-label">
+          <i class="fa-solid ${sec.icon}" style="color:var(--accent); width:14px;"></i>
+          ${sec.label}
+        </td>
+        ${cells}
+      </tr>`;
+  }).join('');
+
+  const detail = document.getElementById('users-admin-detail');
+  if (!detail) return;
+
+  detail.innerHTML = `
+    <div class="user-fiche">
+
+      <!-- En-tête -->
+      <div class="user-fiche-header">
+        <div class="user-fiche-avatar" style="background:${roleColor(u.role)}20; color:${roleColor(u.role)};">
+          ${u.displayName.split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase()}
+          <span class="user-fiche-status-dot" style="background:${statusColor};"></span>
+        </div>
+        <div class="user-fiche-info">
+          <h2>${escapeHtml(u.displayName)}</h2>
+          <p>${escapeHtml(u.email)} · <span style="color:${statusColor};">${statusLabel}</span></p>
+        </div>
+        <div class="user-fiche-actions-row">
+          <span class="role-pill ${u.role}">${u.role === 'admin' ? 'Administrateur' : 'Employé'}</span>
+          <button class="btn-ghost-sm" id="btn-edit-user" data-id="${u.id}">
+            <i class="fa-solid fa-pen"></i> Modifier
+          </button>
+          ${u.id !== 'usr1' ? `
+          <button class="btn-ghost-sm danger" id="btn-delete-user" data-id="${u.id}">
+            <i class="fa-solid fa-trash"></i>
+          </button>` : ''}
+        </div>
+      </div>
+
+      <!-- Méta -->
+      <div class="user-fiche-meta-row">
+        <div class="user-meta-item">
+          <span class="client-info-label"><i class="fa-regular fa-calendar"></i> Créé le</span>
+          <span class="client-info-value">${formatDate(u.createdAt)}</span>
+        </div>
+        <div class="user-meta-item">
+          <span class="client-info-label"><i class="fa-solid fa-shield-halved"></i> Rôle</span>
+          <span class="client-info-value">${u.role === 'admin' ? 'Administrateur' : 'Employé'}</span>
+        </div>
+        <div class="user-meta-item">
+          <span class="client-info-label"><i class="fa-solid fa-circle-dot"></i> Statut</span>
+          <span class="client-info-value" style="color:${statusColor};">${statusLabel}</span>
+        </div>
+      </div>
+
+      <!-- Tableau des permissions -->
+      <div class="perm-section">
+        <div class="perm-section-title-row">
+          <h4 class="client-fiche-section-title" style="margin-bottom:0;">Accès aux sections & droits</h4>
+          ${u.role !== 'admin' ? `
+          <div class="perm-quick-actions">
+            <button class="btn-ghost-sm" id="btn-perm-all">Tout accorder</button>
+            <button class="btn-ghost-sm" id="btn-perm-none">Tout révoquer</button>
+          </div>` : `<span style="font-size:12px; color:var(--text-muted);">L'administrateur a accès complet à tout.</span>`}
+        </div>
+
+        <div class="perm-table-wrapper">
+          <table class="perm-table">
+            <thead>
+              <tr>
+                <th class="perm-th-section">Section</th>
+                ${PERMISSIONS.map(p => `
+                  <th class="perm-th" title="${p.desc}">
+                    <span>${p.label}</span>
+                  </th>`).join('')}
+              </tr>
+            </thead>
+            <tbody>${permRows}</tbody>
+          </table>
+        </div>
+
+        ${u.role !== 'admin' ? `
+        <div class="perm-save-row">
+          <span class="perm-save-hint" id="perm-hint" style="display:none;">
+            <i class="fa-solid fa-circle-info"></i> Modifications non sauvegardées
+          </span>
+          <button class="btn-primary-sm" id="btn-save-perms" data-user-id="${u.id}">
+            <i class="fa-solid fa-check"></i> Sauvegarder les permissions
+          </button>
+        </div>` : ''}
+      </div>
+
+    </div>
+  `;
+
+  // Attacher les événements
+  document.getElementById('btn-edit-user')?.addEventListener('click', () => openUserModal(u.id));
+  document.getElementById('btn-delete-user')?.addEventListener('click', () => {
+    if (confirm(`Supprimer l'utilisateur "${u.displayName}" ?`)) {
+      const idx = DEMO_USERS.findIndex(x => x.id === u.id);
+      if (idx !== -1) DEMO_USERS.splice(idx, 1);
+      selectedUserId = null;
+      document.getElementById('users-list').innerHTML = renderUserListItems(DEMO_USERS);
+      document.getElementById('users-admin-detail').innerHTML = `<div class="client-detail-empty"><i class="fa-solid fa-shield-halved"></i><p>Sélectionnez un utilisateur pour gérer ses accès</p></div>`;
+      updateUserStats();
+    }
+  });
+
+  // Toggle permissions
+  document.querySelectorAll('.perm-checkbox').forEach(cb => {
+    cb.addEventListener('change', () => {
+      const hint = document.getElementById('perm-hint');
+      if (hint) hint.style.display = 'inline-flex';
+    });
+  });
+
+  // Tout accorder
+  document.getElementById('btn-perm-all')?.addEventListener('click', () => {
+    document.querySelectorAll('.perm-checkbox:not(:disabled)').forEach(cb => { cb.checked = true; });
+    const hint = document.getElementById('perm-hint');
+    if (hint) hint.style.display = 'inline-flex';
+  });
+
+  // Tout révoquer (garde lecture dashboard)
+  document.getElementById('btn-perm-none')?.addEventListener('click', () => {
+    document.querySelectorAll('.perm-checkbox:not(:disabled)').forEach(cb => {
+      cb.checked = cb.dataset.section === 'dashboard' && cb.dataset.perm === 'view';
+    });
+    const hint = document.getElementById('perm-hint');
+    if (hint) hint.style.display = 'inline-flex';
+  });
+
+  // Sauvegarder
+  document.getElementById('btn-save-perms')?.addEventListener('click', () => {
+    const targetUser = DEMO_USERS.find(x => x.id === userId);
+    if (!targetUser) return;
+    // Reconstruire les permissions depuis les checkboxes
+    const newPerms = {};
+    SECTIONS.forEach(sec => { newPerms[sec.key] = []; });
+    document.querySelectorAll('.perm-checkbox').forEach(cb => {
+      if (cb.checked) newPerms[cb.dataset.section].push(cb.dataset.perm);
+    });
+    targetUser.permissions = newPerms;
+    const hint = document.getElementById('perm-hint');
+    if (hint) { hint.style.display = 'none'; }
+    // Feedback visuel
+    const btn = document.getElementById('btn-save-perms');
+    if (btn) {
+      btn.innerHTML = '<i class="fa-solid fa-check"></i> Sauvegardé !';
+      btn.style.background = '#10b981';
+      setTimeout(() => {
+        btn.innerHTML = '<i class="fa-solid fa-check"></i> Sauvegarder les permissions';
+        btn.style.background = '';
+      }, 2000);
+    }
+  });
+}
+
+// ── Init section ─────────────────────────────────────────────────────────────
+
+function initUsersAdmin() {
+  // Clic sur un utilisateur
+  document.getElementById('users-list')?.addEventListener('click', e => {
+    const item = e.target.closest('.users-list-item');
+    if (!item) return;
+    selectedUserId = item.dataset.userId;
+    document.querySelectorAll('.users-list-item').forEach(el => el.classList.toggle('active', el.dataset.userId === selectedUserId));
+    renderUserDetail(selectedUserId);
+  });
+
+  // Nouvel utilisateur
+  document.getElementById('btn-new-user')?.addEventListener('click', () => openUserModal(null));
+
+  // Recherche
+  document.getElementById('users-search-input')?.addEventListener('input', e => {
+    const q = e.target.value.toLowerCase();
+    const filtered = DEMO_USERS.filter(u =>
+      `${u.displayName} ${u.email} ${u.role}`.toLowerCase().includes(q)
+    );
+    document.getElementById('users-list').innerHTML = renderUserListItems(filtered);
+    reattachUserListClicks();
+  });
+
+  // Sélectionner le premier
+  if (DEMO_USERS.length > 0) {
+    selectedUserId = DEMO_USERS[0].id;
+    document.querySelectorAll('.users-list-item').forEach(el => el.classList.toggle('active', el.dataset.userId === selectedUserId));
+    renderUserDetail(selectedUserId);
+  }
+}
+
+function reattachUserListClicks() {
+  document.querySelectorAll('.users-list-item').forEach(el => {
+    el.addEventListener('click', () => {
+      selectedUserId = el.dataset.userId;
+      document.querySelectorAll('.users-list-item').forEach(x => x.classList.toggle('active', x.dataset.userId === selectedUserId));
+      renderUserDetail(selectedUserId);
+    });
+  });
+}
+
+function updateUserStats() {
+  const adminCount    = DEMO_USERS.filter(u => u.role === 'admin').length;
+  const employeeCount = DEMO_USERS.filter(u => u.role === 'employee').length;
+  const pills = document.querySelectorAll('.users-stat-num');
+  if (pills[0]) pills[0].textContent = DEMO_USERS.length;
+  if (pills[1]) pills[1].textContent = adminCount;
+  if (pills[2]) pills[2].textContent = employeeCount;
+}
+
+// ── Modal utilisateur ────────────────────────────────────────────────────────
+
+function openUserModal(userId) {
+  const existing = userId ? DEMO_USERS.find(u => u.id === userId) : null;
+  document.getElementById('user-modal-overlay')?.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'user-modal-overlay';
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 class="modal-title">${existing ? 'Modifier l\'utilisateur' : 'Nouvel utilisateur'}</h3>
+        <button class="modal-close" id="um-close"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Nom complet <span class="required">*</span></label>
+          <input type="text" id="um-name" placeholder="Prénom Nom" value="${escapeHtml(existing?.displayName ?? '')}">
+        </div>
+        <div class="form-group">
+          <label>Adresse email <span class="required">*</span></label>
+          <input type="email" id="um-email" placeholder="prenom.nom@agora.fr" value="${escapeHtml(existing?.email ?? '')}">
+        </div>
+        ${!existing ? `
+        <div class="form-group">
+          <label>Mot de passe temporaire <span class="required">*</span></label>
+          <input type="password" id="um-password" placeholder="Minimum 8 caractères">
+          <div class="field-hint">L'utilisateur devra le changer à la première connexion.</div>
+        </div>` : ''}
+        <div class="form-row-2">
+          <div class="form-group">
+            <label>Rôle <span class="required">*</span></label>
+            <select id="um-role">
+              <option value="employee" ${existing?.role === 'employee' ? 'selected' : ''}>Employé</option>
+              <option value="admin"    ${existing?.role === 'admin'    ? 'selected' : ''}>Administrateur</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Statut initial</label>
+            <select id="um-status">
+              <option value="disponible"   ${existing?.status === 'disponible'   ? 'selected' : ''}>Disponible</option>
+              <option value="en_pause"     ${existing?.status === 'en_pause'     ? 'selected' : ''}>En pause</option>
+              <option value="indisponible" ${existing?.status === 'indisponible' ? 'selected' : ''}>Indisponible</option>
+            </select>
+          </div>
+        </div>
+        <div id="um-error" class="modal-error" style="display:none;"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-ghost" id="um-cancel">Annuler</button>
+        <button class="btn-primary-sm" id="um-save">
+          <i class="fa-solid fa-check"></i> ${existing ? 'Enregistrer' : 'Créer l\'utilisateur'}
+        </button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  document.getElementById('um-close').addEventListener('click', close);
+  document.getElementById('um-cancel').addEventListener('click', close);
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+
+  document.getElementById('um-save').addEventListener('click', () => {
+    const name     = document.getElementById('um-name').value.trim();
+    const email    = document.getElementById('um-email').value.trim();
+    const role     = document.getElementById('um-role').value;
+    const status   = document.getElementById('um-status').value;
+    const password = document.getElementById('um-password')?.value ?? '';
+    const errEl    = document.getElementById('um-error');
+
+    if (!name)  { errEl.textContent = 'Le nom est requis.';   errEl.style.display='block'; return; }
+    if (!email) { errEl.textContent = 'L\'email est requis.'; errEl.style.display='block'; return; }
+    if (!existing && password.length < 8) { errEl.textContent = 'Le mot de passe doit faire au moins 8 caractères.'; errEl.style.display='block'; return; }
+
+    // Permissions par défaut pour un nouvel employé
+    const defaultPerms = {};
+    SECTIONS.forEach(sec => { defaultPerms[sec.key] = ['view']; });
+
+    if (existing) {
+      Object.assign(existing, { displayName: name, email, role, status });
+    } else {
+      DEMO_USERS.push({
+        id:          'usr' + (DEMO_USERS.length + 1),
+        displayName: name,
+        email,
+        role,
+        status,
+        createdAt:   new Date().toISOString().slice(0,10),
+        permissions: role === 'admin'
+          ? Object.fromEntries(SECTIONS.map(s => [s.key, ['view','edit','delete','export']]))
+          : defaultPerms,
+      });
+    }
+
+    close();
+    document.getElementById('users-list').innerHTML = renderUserListItems(DEMO_USERS);
+    updateUserStats();
+    const targetId = existing ? userId : DEMO_USERS[DEMO_USERS.length - 1].id;
+    selectedUserId = targetId;
+    document.querySelectorAll('.users-list-item').forEach(el => el.classList.toggle('active', el.dataset.userId === selectedUserId));
+    reattachUserListClicks();
+    renderUserDetail(targetId);
+  });
 }
 
 
