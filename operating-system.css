@@ -2820,9 +2820,9 @@ img { display: block; }
 }
 
 .msg-bubble {
-  max-width: 60%;
-  padding: 9px 13px;
-  border-radius: 14px;
+  max-width: 85%;
+  padding: 10px 14px;
+  border-radius: 16px;
   font-size: 13px;
   line-height: 1.5;
   position: relative;

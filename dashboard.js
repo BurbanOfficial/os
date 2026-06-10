@@ -287,6 +287,7 @@ async function renderPageContent(pageName) {
         scheduleMidnightRefresh();
         initGlobalSearch();
       });
+      setupRealtimeDashboard(currentUid); // Real-time updates
       break;
 
     case 'projets':
@@ -304,6 +305,7 @@ async function renderPageContent(pageName) {
         if (subtitle) subtitle.textContent = `${projectsState.projects.length} projet${projectsState.projects.length > 1 ? 's' : ''}`;
       }
       initProjectsTabs();
+      setupRealtimeProjects(); // Real-time updates
       break;
 
     case 'clients':
@@ -316,6 +318,7 @@ async function renderPageContent(pageName) {
         dataCache.lastFetch.clients = nowClients;
       }
       initClientsSection();
+      setupRealtimeClients(); // Real-time updates
       break;
 
     case 'messagerie':
@@ -340,6 +343,7 @@ async function renderPageContent(pageName) {
         dataCache.lastFetch.users = nowUsers;
       }
       initUsersAdmin();
+      setupRealtimeUsers(); // Real-time updates
       break;
 
     case 'parametres':
@@ -4246,6 +4250,146 @@ async function markConversationAsRead(convId) {
 }
 
 let currentMessagesUnsubscribe = null;
+
+// Global real-time subscriptions
+const realtimeSubscriptions = {
+  dashboard: null,
+  projects: null,
+  clients: null,
+  tasks: null,
+  appointments: null,
+  users: null
+};
+
+// Setup real-time dashboard updates
+function setupRealtimeDashboard(uid) {
+  if (!uid) return;
+  
+  // Unsubscribe previous
+  if (realtimeSubscriptions.dashboard) {
+    realtimeSubscriptions.dashboard.forEach(unsub => unsub());
+  }
+  
+  const subs = [];
+  
+  // Real-time projects
+  subs.push(onSnapshot(query(collection(db, 'projects'), limit(100)), (snap) => {
+    const projects = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const counts = countByStatus(projects);
+    const get = id => document.getElementById(id);
+    if (get('proj-total')) get('proj-total').textContent = projects.length;
+    if (get('proj-en-avance')) get('proj-en-avance').textContent = counts.en_avance;
+    if (get('proj-a-temps')) get('proj-a-temps').textContent = counts.a_temps;
+    if (get('proj-en-retard')) get('proj-en-retard').textContent = counts.en_retard;
+    renderUrgentTasksFromCache();
+  }));
+  
+  // Real-time tasks for this user
+  subs.push(onSnapshot(
+    query(collection(db, 'tasks'), where('assignee', '==', uid), where('urgent', '==', true), limit(10)),
+    (snap) => {
+      const tasks = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      window.cachedUrgentTasks = tasks;
+      renderUrgentTasks(tasks);
+    }
+  ));
+  
+  // Real-time appointments
+  subs.push(onSnapshot(
+    query(collection(db, 'appointments'), where('attendees', 'array-contains', uid), limit(20)),
+    (snap) => {
+      const appointments = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      renderTodayAppointments(appointments);
+    }
+  ));
+  
+  realtimeSubscriptions.dashboard = subs;
+}
+
+// Setup real-time projects page
+function setupRealtimeProjects() {
+  if (realtimeSubscriptions.projects) {
+    realtimeSubscriptions.projects();
+  }
+  
+  realtimeSubscriptions.projects = onSnapshot(
+    query(collection(db, 'projects'), limit(200)),
+    (snap) => {
+      projectsState.projects = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      projectsState.filtered = [...projectsState.projects];
+      // Update UI if on projects page
+      const tabContent = document.getElementById('tab-content');
+      const subtitle = document.getElementById('projects-subtitle');
+      if (subtitle) subtitle.textContent = `${projectsState.projects.length} projet${projectsState.projects.length > 1 ? 's' : ''}`;
+      if (tabContent && document.querySelector('.projects-tabs')) {
+        renderProjectsContent();
+      }
+    }
+  );
+}
+
+// Setup real-time clients page
+function setupRealtimeClients() {
+  if (realtimeSubscriptions.clients) {
+    realtimeSubscriptions.clients();
+  }
+  
+  realtimeSubscriptions.clients = onSnapshot(
+    query(collection(db, 'clients'), limit(200)),
+    (snap) => {
+      clientsState.clients = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      clientsState.filtered = [...clientsState.clients];
+      // Update UI if on clients page
+      const clientsList = document.getElementById('clients-list');
+      if (clientsList) {
+        clientsList.innerHTML = renderClientListItems(clientsState.clients);
+        const countEl = document.getElementById('clients-count');
+        if (countEl) countEl.textContent = clientsState.clients.length;
+        
+        // Refresh selected client detail if any
+        if (clientsState.selectedId) {
+          renderClientDetail(clientsState.selectedId);
+        }
+      }
+    }
+  );
+}
+
+// Setup real-time users (admin only)
+function setupRealtimeUsers() {
+  if (!currentRole === 'admin') return;
+  if (realtimeSubscriptions.users) {
+    realtimeSubscriptions.users();
+  }
+  
+  realtimeSubscriptions.users = onSnapshot(
+    query(collection(db, 'users'), limit(100)),
+    (snap) => {
+      const users = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      window.cachedUsers = users;
+      usersState.users = users;
+      // Update UI if on users page
+      const usersList = document.getElementById('users-list');
+      if (usersList) {
+        usersList.innerHTML = renderUserListItems(usersState.users);
+        updateUserStats();
+        
+        // Refresh selected user detail if any
+        if (selectedUserId) {
+          renderUserDetail(selectedUserId);
+        }
+        reattachUserListClicks();
+      }
+    }
+  );
+}
+
+// Render tasks from cache helper
+function renderUrgentTasksFromCache() {
+  if (window.cachedUrgentTasks) {
+    renderUrgentTasks(window.cachedUrgentTasks);
+  }
+}
 
 function openConversation(convId) {
   console.log('Opening conversation:', convId);
