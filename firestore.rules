@@ -8,8 +8,9 @@ service cloud.firestore {
     }
 
     match /users/{uid} {
-      allow read, write: if isAdmin();
-      allow read, update: if request.auth != null && request.auth.uid == uid;
+      allow read: if request.auth != null;  // Tout utilisateur authentifié peut voir les autres (pour l'équipe)
+      allow write: if isAdmin();
+      allow update: if request.auth != null && request.auth.uid == uid;
       allow create: if false;
     }
 
@@ -41,6 +42,29 @@ service cloud.firestore {
     match /metrics/{uid}/{document=**} {
       allow read: if request.auth != null && request.auth.uid == uid;
       allow write: if isAdmin();
+    }
+
+    // Règles pour la messagerie
+    match /conversations/{convId} {
+      // Lecture: tout utilisateur authentifié (filtrage côté client)
+      allow read: if request.auth != null;
+      // Création si on est participant
+      allow create: if request.auth != null &&
+                     request.resource.data.participants.hasAny([request.auth.uid]);
+      // Mise à jour si on est participant
+      allow update: if request.auth != null &&
+                     resource.data.participants.hasAny([request.auth.uid]);
+    }
+
+    match /conversations/{convId}/messages/{msgId} {
+      // Lecture: tout utilisateur authentifié (filtrage côté client par conversation)
+      allow read: if request.auth != null;
+      // Création si on est connecté (le senderId doit correspondre)
+      allow create: if request.auth != null &&
+                     request.resource.data.senderId == request.auth.uid;
+      // Mise à jour (pour marquer comme lu) - vérifier qu'on est participant
+      allow update: if request.auth != null &&
+                     get(/databases/$(database)/documents/conversations/$(convId)).data.participants.hasAny([request.auth.uid]);
     }
 
     match /{document=**} {

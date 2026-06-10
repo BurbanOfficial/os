@@ -2605,6 +2605,69 @@ img { display: block; }
 .msg-conv-item:hover { background: var(--surface-hover); }
 .msg-conv-item.active { background: var(--accent-light); }
 
+.msg-conv-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.msg-conv-menu-btn {
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: all 0.2s;
+}
+
+.msg-conv-item:hover .msg-conv-menu-btn {
+  opacity: 1;
+}
+
+.msg-conv-menu-btn:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+/* Context menu */
+.conv-context-menu {
+  animation: fadeIn 0.15s ease-out;
+}
+
+.conv-context-menu .menu-item {
+  padding: 8px 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-primary);
+  transition: background 0.2s;
+}
+
+.conv-context-menu .menu-item:hover {
+  background: var(--surface-hover);
+}
+
+.conv-context-menu .menu-item.delete {
+  color: #ef4444;
+}
+
+.conv-context-menu .menu-item.delete:hover {
+  background: #fee2e2;
+}
+
+.conv-context-menu i {
+  width: 16px;
+  text-align: center;
+}
+
 .msg-conv-avatar {
   width: 38px; height: 38px;
   border-radius: 50%;
@@ -2787,6 +2850,153 @@ img { display: block; }
 }
 
 .bubble-other .msg-bubble-time { text-align: left; }
+
+.msg-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-muted);
+  gap: 8px;
+}
+
+.msg-empty-chat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-secondary);
+  gap: 8px;
+}
+
+.msg-empty-chat p {
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.msg-empty-chat span {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.header-btn.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Typing indicator */
+.msg-typing-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: var(--surface);
+  border-top: 1px solid var(--border-subtle);
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.typing-dot {
+  width: 6px;
+  height: 6px;
+  background: var(--accent);
+  border-radius: 50%;
+  animation: typingBounce 1.4s infinite ease-in-out both;
+}
+
+.typing-dot:nth-child(1) { animation-delay: -0.32s; }
+.typing-dot:nth-child(2) { animation-delay: -0.16s; }
+
+@keyframes typingBounce {
+  0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+  40% { transform: scale(1); opacity: 1; }
+}
+
+.typing-text {
+  margin-left: 4px;
+  font-style: italic;
+}
+
+/* Attachment button and emoji */
+.msg-attach-btn, .msg-emoji-btn {
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.msg-attach-btn:hover, .msg-emoji-btn:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.msg-attach-btn:disabled, .msg-emoji-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Message attachments */
+.msg-attachment {
+  margin-bottom: 6px;
+}
+
+.msg-attachment img {
+  transition: transform 0.2s;
+}
+
+.msg-attachment img:hover {
+  transform: scale(1.02);
+}
+
+/* Message reactions */
+.msg-reactions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+  justify-content: flex-end;
+}
+
+.msg-bubble-row.other .msg-reactions {
+  justify-content: flex-start;
+}
+
+.reaction {
+  font-size: 12px;
+  padding: 2px 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.reaction:hover {
+  background: var(--surface-hover);
+  transform: scale(1.1);
+}
+
+.reaction.mine {
+  background: var(--accent-light);
+  border-color: var(--accent);
+}
+
+/* Reaction menu */
+.reaction-menu {
+  animation: fadeIn 0.2s ease-out;
+}
+
+.reaction-option:hover {
+  background: var(--surface-hover);
+}
 
 .msg-input-area {
   display: flex;

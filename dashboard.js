@@ -26,6 +26,7 @@ import {
   query,
   where,
   getDocs,
+  onSnapshot,
   limit,
   orderBy,
   serverTimestamp
@@ -319,6 +320,7 @@ async function renderPageContent(pageName) {
 
     case 'messagerie':
       main.innerHTML = getMessagerieHTML();
+      await loadMessagerieData();
       initMessagerie();
       break;
 
@@ -3786,10 +3788,301 @@ function openProjectModalForClient(clientId) {
 ═══════════════════════════════════════════════════════════ */
 
 let activeConvId = null;
+let typingTimeout = null;
+const TYPING_TIMEOUT_MS = 3000;
+
+// Système de notification sonore
+const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+function playMessageSound() {
+  try {
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    oscillator.frequency.value = 800;
+    oscillator.type = 'sine';
+    gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+    oscillator.start(audioContext.currentTime);
+    oscillator.stop(audioContext.currentTime + 0.5);
+  } catch (e) { console.log('Audio not available'); }
+}
+
+// File d'attente pour messages hors-ligne
+const offlineQueue = [];
+let isOnline = navigator.onLine;
+window.addEventListener('online', () => { isOnline = true; processOfflineQueue(); });
+window.addEventListener('offline', () => { isOnline = false; });
+
+async function processOfflineQueue() {
+  while (offlineQueue.length > 0 && isOnline) {
+    const task = offlineQueue.shift();
+    try { await task(); } catch (e) { console.error('Failed to process offline task', e); }
+  }
+}
 
 async function loadMessagerieData() {
-  // Messaging module is in development
-  // This will load real conversations from Firestore when implemented
+  if (!currentUid) return;
+
+  try {
+    // Charger l'équipe (utilisateurs avec statut)
+    const usersSnap = await getDocs(query(collection(db, 'users'), limit(50)));
+    messagerieState.team = usersSnap.docs
+      .filter(d => d.id !== currentUid)
+      .map(d => {
+        const data = d.data();
+        return {
+          id: d.id,
+          name: data.displayName || 'Utilisateur',
+          initials: data.displayName ? data.displayName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : '??',
+          color: data.avatarColor || '#4f46e5',
+          role: data.role || 'Membre',
+          status: data.status || 'disponible'
+        };
+      });
+
+    // Mettre à jour l'UI immédiatement après chargement initial
+    const teamList = document.getElementById('msg-team-list');
+    if (teamList && messagerieState.team.length > 0) {
+      teamList.innerHTML = messagerieState.team.map(user => `
+        <div class="msg-team-item" data-user-id="${user.id}" style="cursor:pointer;" title="Cliquer pour discuter avec ${user.name}">
+          <div class="msg-team-avatar" style="background:${user.color}20;color:${user.color}">
+            ${user.initials}
+            <span class="status-dot ${user.status}"></span>
+          </div>
+          <div class="msg-team-info">
+            <span class="msg-team-name">${user.name}</span>
+            <span class="msg-team-role">${user.role}</span>
+          </div>
+        </div>
+      `).join('');
+
+      // Réattacher les événements
+      document.querySelectorAll('.msg-team-item').forEach(el => {
+        el.addEventListener('click', () => {
+          const userId = el.dataset.userId;
+          const conv = messagerieState.conversations.find(c => c.userId === userId);
+          if (conv) {
+            openConversation(conv.id);
+          } else {
+            startConversation(userId);
+          }
+        });
+      });
+    }
+
+    // Charger les conversations de l'utilisateur
+    // Note: pas de orderBy pour éviter l'index composite
+    const convsQuery = query(
+      collection(db, 'conversations'),
+      where('participants', 'array-contains', currentUid)
+    );
+
+    // Souscrire aux changements temps réel
+    onSnapshot(convsQuery, async (snapshot) => {
+      const conversations = [];
+      
+      // Check for new messages to play sound
+      const hasNewMessage = snapshot.docChanges().some(change => {
+        if (change.type === 'modified') {
+          const data = change.doc.data();
+          return data.lastMessage && data.lastMessage.senderId !== currentUid;
+        }
+        return false;
+      });
+      
+      if (hasNewMessage && document.hidden) {
+        playMessageSound();
+        // Request notification permission and show
+        if ('Notification' in window && Notification.permission === 'granted') {
+          new Notification('Nouveau message', { body: 'Vous avez reçu un nouveau message', icon: '/favicon.ico' });
+        }
+      }
+      
+      for (const docSnap of snapshot.docs) {
+        const convData = docSnap.data();
+        const otherUserId = convData.participants.find(id => id !== currentUid);
+        const otherUser = messagerieState.team.find(u => u.id === otherUserId) || { name: 'Inconnu', initials: '?', color: '#999' };
+
+        // Compter messages non lus - simple query puis filtre client
+        const unreadQuery = query(
+          collection(db, 'conversations', docSnap.id, 'messages'),
+          where('read', '==', false)
+        );
+        const unreadSnap = await getDocs(unreadQuery);
+        const unreadCount = unreadSnap.docs.filter(d => d.data().senderId === otherUserId).length;
+
+        conversations.push({
+          id: docSnap.id,
+          userId: otherUserId,
+          otherUser: otherUser,
+          lastMsg: convData.lastMessage?.text || 'Nouvelle conversation',
+          lastTime: convData.lastMessageAt?.toDate ? formatTime(convData.lastMessageAt.toDate()) : '',
+          unread: unreadCount,
+          created: convData.createdAt,
+          lastMessageAt: convData.lastMessageAt?.toDate?.() || new Date(0)
+        });
+      }
+
+      // Trier côté client par date du dernier message (décroissant)
+      conversations.sort((a, b) => b.lastMessageAt - a.lastMessageAt);
+      
+      messagerieState.conversations = conversations;
+
+      // Mettre à jour l'UI si on est sur la page messagerie
+      const convList = document.getElementById('msg-convs-list');
+      if (convList) {
+        convList.innerHTML = conversations.length > 0
+          ? renderConvList(conversations)
+          : renderEmptyConvList();
+        attachConvClicks();
+      }
+
+      // Mettre à jour badge notifications
+      updateMessageBadge();
+    });
+
+    // Mettre à jour la liste de l'équipe en temps réel
+    const teamQuery = query(collection(db, 'users'), limit(50));
+    onSnapshot(teamQuery, (snapshot) => {
+      messagerieState.team = snapshot.docs
+        .filter(d => d.id !== currentUid)
+        .map(d => {
+          const data = d.data();
+          return {
+            id: d.id,
+            name: data.displayName || 'Utilisateur',
+            initials: data.displayName ? data.displayName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : '??',
+            color: data.avatarColor || '#4f46e5',
+            role: data.role || 'Membre',
+            status: data.status || 'disponible'
+          };
+        });
+
+      const teamList = document.getElementById('msg-team-list');
+      if (teamList) {
+        teamList.innerHTML = messagerieState.team.length > 0
+          ? messagerieState.team.map(user => `
+            <div class="msg-team-item" data-user-id="${user.id}" style="cursor:pointer;" title="Cliquer pour discuter avec ${user.name}">
+              <div class="msg-team-avatar" style="background:${user.color}20;color:${user.color}">
+                ${user.initials}
+                <span class="status-dot ${user.status}"></span>
+              </div>
+              <div class="msg-team-info">
+                <span class="msg-team-name">${user.name}</span>
+                <span class="msg-team-role">${user.role}</span>
+              </div>
+            </div>
+          `).join('')
+          : '<p class="no-team">Aucun membre disponible</p>';
+
+        // Réattacher les événements de clic
+        document.querySelectorAll('.msg-team-item').forEach(el => {
+          el.addEventListener('click', () => {
+            const userId = el.dataset.userId;
+            const conv = messagerieState.conversations.find(c => c.userId === userId);
+            if (conv) {
+              openConversation(conv.id);
+            } else {
+              startConversation(userId);
+            }
+          });
+        });
+      }
+    });
+
+  } catch (err) {
+    console.error('Erreur chargement messagerie:', err);
+  }
+}
+
+function formatTime(date) {
+  if (!date) return '';
+  const now = new Date();
+  const isToday = date.toDateString() === now.toDateString();
+
+  if (isToday) {
+    return date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  } else {
+    return date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+  }
+}
+
+function updateMessageBadge() {
+  const totalUnread = messagerieState.conversations.reduce((s, c) => s + c.unread, 0);
+  const badge = document.getElementById('msg-badge');
+  if (badge) {
+    badge.textContent = totalUnread > 0 ? totalUnread : '';
+    badge.style.display = totalUnread > 0 ? 'inline-flex' : 'none';
+  }
+}
+
+async function startConversation(userId) {
+  if (!currentUid || userId === currentUid) return;
+
+  // Vérifier si l'utilisateur est déjà dans l'équipe
+  const user = messagerieState.team.find(u => u.id === userId);
+  if (!user) {
+    showToast('Utilisateur non trouvé', 'error');
+    return;
+  }
+
+  try {
+    // Vérifier si conversation existe déjà
+    const existingQuery = query(
+      collection(db, 'conversations'),
+      where('participants', 'array-contains', currentUid)
+    );
+    const existingSnap = await getDocs(existingQuery);
+    const existingConv = existingSnap.docs.find(d => {
+      const data = d.data();
+      return data.participants.includes(userId);
+    });
+
+    if (existingConv) {
+      openConversation(existingConv.id);
+      return;
+    }
+
+    // Afficher un indicateur de chargement
+    showToast(`Création de la conversation avec ${user.name}...`, 'info');
+
+    // Créer nouvelle conversation
+    const newConvRef = await addDoc(collection(db, 'conversations'), {
+      participants: [currentUid, userId],
+      createdAt: serverTimestamp(),
+      lastMessageAt: serverTimestamp(),
+      lastMessage: null
+    });
+
+    showToast(`Conversation avec ${user.name} créée`, 'success');
+
+    // Ajouter immédiatement à la liste locale et ouvrir
+    const newConv = {
+      id: newConvRef.id,
+      userId: userId,
+      otherUser: user,
+      lastMsg: 'Nouvelle conversation',
+      lastTime: '',
+      unread: 0,
+      created: new Date()
+    };
+    messagerieState.conversations.unshift(newConv);
+    
+    // Mettre à jour l'UI de la liste
+    const convList = document.getElementById('msg-convs-list');
+    if (convList) {
+      convList.innerHTML = renderConvList(messagerieState.conversations);
+      attachConvClicks();
+    }
+    
+    // Ouvrir immédiatement la conversation
+    openConversation(newConvRef.id);
+
+  } catch (err) {
+    console.error('Erreur création conversation:', err);
+    showToast('Impossible de démarrer la conversation', 'error');
+  }
 }
 
 function getMessagerieHTML() {
@@ -3821,10 +4114,10 @@ function getMessagerieHTML() {
             ${hasData ? renderConvList(messagerieState.conversations) : renderEmptyConvList()}
           </div>
           <div class="msg-team-section">
-            <h4>Équipe</h4>
+            <h4>Équipe <span style="font-size:11px;font-weight:400;color:var(--text-muted);">(cliquer pour discuter)</span></h4>
             <div class="msg-team-list" id="msg-team-list">
               ${messagerieState.team.length > 0 ? messagerieState.team.map(user => `
-                <div class="msg-team-item" data-user-id="${user.id}">
+                <div class="msg-team-item" data-user-id="${user.id}" style="cursor:pointer;" title="Cliquer pour discuter avec ${user.name || 'Utilisateur'}">
                   <div class="msg-team-avatar" style="background:${user.color || '#4f46e5'}20;color:${user.color || '#4f46e5'}">
                     ${user.initials || '?'}
                     <span class="status-dot ${user.status || 'disponible'}"></span>
@@ -3841,9 +4134,9 @@ function getMessagerieHTML() {
         <!-- Colonne droite : Chat -->
         <div class="messagerie-chat" id="msg-chat-col">
           <div class="msg-empty-state">
-            <i class="fa-solid fa-comments"></i>
-            <p>${hasData ? 'Sélectionnez une conversation pour commencer' : 'La messagerie sera disponible prochainement'}</p>
-            ${!hasData ? '<p style="font-size:13px;color:var(--text-muted);margin-top:8px;">Contactez votre administrateur pour plus d\'informations</p>' : ''}
+            <i class="fa-solid fa-comments" style="font-size:48px;color:var(--text-muted);opacity:0.5;"></i>
+            <p style="margin-top:16px;font-weight:500;">${messagerieState.team.length > 0 ? 'Sélectionnez une conversation ou cliquez sur un membre de l\'équipe' : 'Aucun membre disponible'}</p>
+            ${messagerieState.team.length > 0 ? '<p style="font-size:13px;color:var(--text-muted);margin-top:8px;">Cliquez sur un utilisateur dans la liste "Équipe" pour démarrer une conversation</p>' : ''}
           </div>
         </div>
       </div>
@@ -3878,23 +4171,106 @@ function renderConvList(convs) {
           </div>
           <p class="msg-conv-preview">${escapeHtml(conv.lastMsg)}</p>
         </div>
-        ${conv.unread > 0 ? `<span class="msg-unread-badge">${conv.unread}</span>` : ''}
+        <div class="msg-conv-actions">
+          ${conv.unread > 0 ? `<span class="msg-unread-badge">${conv.unread}</span>` : ''}
+          <button class="msg-conv-menu-btn" data-conv-id="${conv.id}" title="Options">
+            <i class="fa-solid fa-ellipsis-vertical"></i>
+          </button>
+        </div>
       </div>`;
   }).join('');
 }
 
+// Delete conversation
+async function deleteConversation(convId) {
+  if (!confirm('Supprimer cette conversation ? Cette action est irréversible.')) return;
+  
+  try {
+    // Delete all messages first
+    const messagesSnap = await getDocs(collection(db, 'conversations', convId, 'messages'));
+    const deletePromises = messagesSnap.docs.map(d => deleteDoc(doc(db, 'conversations', convId, 'messages', d.id)));
+    await Promise.all(deletePromises);
+    
+    // Delete conversation
+    await deleteDoc(doc(db, 'conversations', convId));
+    
+    // Close if active
+    if (activeConvId === convId) {
+      activeConvId = null;
+      document.getElementById('msg-chat-col').innerHTML = `
+        <div class="msg-empty-state">
+          <i class="fa-solid fa-comments"></i>
+          <p>Sélectionnez une conversation pour commencer</p>
+        </div>`;
+    }
+    
+    showToast('Conversation supprimée', 'success');
+  } catch (err) {
+    console.error('Erreur suppression:', err);
+    showToast('Impossible de supprimer la conversation', 'error');
+  }
+}
+
+// Show conversation context menu
+function showConvMenu(convId, x, y) {
+  const existing = document.querySelector('.conv-context-menu');
+  if (existing) existing.remove();
+  
+  const menu = document.createElement('div');
+  menu.className = 'conv-context-menu';
+  menu.innerHTML = `
+    <div class="menu-item delete" onclick="deleteConversation('${convId}')">
+      <i class="fa-solid fa-trash"></i> Supprimer
+    </div>
+    <div class="menu-item" onclick="markConversationAsRead('${convId}')">
+      <i class="fa-solid fa-check-double"></i> Marquer comme lu
+    </div>
+  `;
+  menu.style.cssText = `position:fixed;top:${y}px;left:${x}px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:4px 0;min-width:160px;box-shadow:0 4px 12px rgba(0,0,0,0.15);z-index:1000;`;
+  
+  document.body.appendChild(menu);
+  
+  setTimeout(() => {
+    document.addEventListener('click', function closeMenu(e) {
+      if (!menu.contains(e.target)) {
+        menu.remove();
+        document.removeEventListener('click', closeMenu);
+      }
+    });
+  }, 100);
+}
+
+async function markConversationAsRead(convId) {
+  await markMessagesAsRead(convId);
+  showToast('Conversation marquée comme lue', 'success');
+}
+
+let currentMessagesUnsubscribe = null;
+
 function openConversation(convId) {
+  console.log('Opening conversation:', convId);
   activeConvId = convId;
   const conv = messagerieState.conversations.find(c => c.id === convId);
+  console.log('Found conv:', conv);
   const user = messagerieState.team.find(u => u.id === conv?.userId);
-  if (!conv || !user) return;
+  console.log('Found user:', user);
+  
+  if (!conv) {
+    console.error('Conversation not found in state:', convId);
+    return;
+  }
+  if (!user) {
+    console.error('User not found for conversation:', conv?.userId);
+    showToast('Utilisateur non trouvé', 'error');
+    return;
+  }
 
-  conv.unread = 0;
+  // Marquer comme lu dans l'UI
   document.querySelectorAll('.msg-conv-item').forEach(el => el.classList.toggle('active', el.dataset.convId === convId));
-  // Recalculer le badge total
-  const totalUnread = messagerieState.conversations.reduce((s,c) => s + (c.unread || 0), 0);
-  const badge = document.querySelector('.notif-badge');
-  if (badge) badge.textContent = totalUnread > 0 ? totalUnread : '';
+  updateMessageBadge();
+
+  // Marquer les messages comme lus dans Firestore
+  markMessagesAsRead(convId);
 
   const statusColor = { disponible: '#10b981', en_pause: '#f59e0b', indisponible: '#ef4444' }[user.status] ?? '#94a3b8';
   const statusLabel = { disponible: 'Disponible', en_pause: 'En pause', indisponible: 'Indisponible' }[user.status] ?? user.status;
@@ -3902,18 +4278,7 @@ function openConversation(convId) {
   const chatCol = document.getElementById('msg-chat-col');
   if (!chatCol) return;
 
-  const messagesHTML = conv.messages.map(m => {
-    const isMe = m.from === 'me';
-    return `
-      <div class="msg-bubble-row ${isMe ? 'me' : 'other'}">
-        ${!isMe ? `<div class="msg-bubble-avatar" style="background:${user.color}20;color:${user.color};">${user.initials}</div>` : ''}
-        <div class="msg-bubble ${isMe ? 'bubble-me' : 'bubble-other'}">
-          <p>${escapeHtml(m.text)}</p>
-          <span class="msg-bubble-time">${m.time}</span>
-        </div>
-      </div>`;
-  }).join('');
-
+  // Afficher l'état de chargement
   chatCol.innerHTML = `
     <div class="msg-chat-header">
       <div class="msg-chat-header-left">
@@ -3924,67 +4289,374 @@ function openConversation(convId) {
         </div>
       </div>
       <div class="msg-chat-actions">
-        <button class="header-btn" title="Appel vidéo"><i class="fa-solid fa-video"></i></button>
+        <button class="header-btn ${user.status === 'indisponible' ? 'disabled' : ''}" title="Appel vidéo" ${user.status === 'indisponible' ? 'disabled' : ''}>
+          <i class="fa-solid fa-video"></i>
+        </button>
         <button class="header-btn" title="Infos"><i class="fa-solid fa-circle-info"></i></button>
       </div>
     </div>
     <div class="msg-messages" id="msg-messages">
-      ${messagesHTML}
+      <div class="msg-loading"><i class="fa-solid fa-spinner fa-spin"></i> Chargement...</div>
     </div>
     <div class="msg-input-area">
-      <input type="text" id="msg-input" class="msg-input" placeholder="Écrire un message…">
-      <button class="msg-send-btn" id="msg-send-btn">
+      <button class="msg-attach-btn" id="msg-attach-btn" title="Joindre un fichier" ${user.status === 'indisponible' ? 'disabled' : ''}>
+        <i class="fa-solid fa-paperclip"></i>
+      </button>
+      <input type="file" id="msg-file-input" style="display:none" accept="image/*,.pdf,.doc,.docx">
+      <input type="text" id="msg-input" class="msg-input" placeholder="Écrire un message…" ${user.status === 'indisponible' ? 'disabled' : ''}>
+      <button class="msg-emoji-btn" id="msg-emoji-btn" title="Emoji">
+        <i class="fa-regular fa-face-smile"></i>
+      </button>
+      <button class="msg-send-btn" id="msg-send-btn" ${user.status === 'indisponible' ? 'disabled' : ''}>
         <i class="fa-solid fa-paper-plane"></i>
       </button>
     </div>
+    <div class="msg-typing-indicator" id="msg-typing-indicator" style="display:none;">
+      <span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span>
+      <span class="typing-text">${user.name} écrit...</span>
+    </div>
   `;
 
-  // Scroll en bas
-  const messagesEl = document.getElementById('msg-messages');
-  if (messagesEl) messagesEl.scrollTop = messagesEl.scrollHeight;
+  // Désabonner de l'ancienne conversation
+  if (currentMessagesUnsubscribe) {
+    currentMessagesUnsubscribe();
+  }
 
-  // Envoi de message
-  const sendMsg = () => {
-    const input = document.getElementById('msg-input');
-    const text = input?.value.trim();
-    if (!text) return;
-    conv.messages.push({ from: 'me', text, time: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) });
-    conv.lastMsg = text;
-    conv.lastTime = 'Maintenant';
-    input.value = '';
-    // Re-render les messages
-    const msgs = document.getElementById('msg-messages');
-    if (msgs) {
-      msgs.innerHTML = conv.messages.map(m => {
-        const isMe = m.from === 'me';
-        return `
-          <div class="msg-bubble-row ${isMe ? 'me' : 'other'}">
-            ${!isMe ? `<div class="msg-bubble-avatar" style="background:${user.color}20;color:${user.color};">${user.initials}</div>` : ''}
-            <div class="msg-bubble ${isMe ? 'bubble-me' : 'bubble-other'}">
-              <p>${escapeHtml(m.text)}</p>
-              <span class="msg-bubble-time">${m.time}</span>
-            </div>
-          </div>`;
-      }).join('');
-      msgs.scrollTop = msgs.scrollHeight;
+  // Souscrire aux messages temps réel
+  const messagesQuery = query(
+    collection(db, 'conversations', convId, 'messages'),
+    orderBy('timestamp', 'asc')
+  );
+
+  currentMessagesUnsubscribe = onSnapshot(messagesQuery, (snapshot) => {
+    const messages = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+
+    renderMessages(messages, user);
+  });
+
+  // Envoi de message avec gestion hors-ligne
+  const sendMsg = async (textOverride = null, attachment = null) => {
+    if (user.status === 'indisponible') {
+      showToast('Cet utilisateur est indisponible', 'error');
+      return;
     }
-    // Mettre à jour la liste des convs
-    document.getElementById('msg-convs-list').innerHTML = renderConvList(messagerieState.conversations);
-    attachConvClicks();
+
+    const input = document.getElementById('msg-input');
+    const text = textOverride || input?.value.trim();
+    if (!text && !attachment) return;
+
+    if (!textOverride) input.value = '';
+
+    const messageData = {
+      text: text || '',
+      senderId: currentUid,
+      timestamp: serverTimestamp(),
+      read: false,
+      attachment: attachment || null,
+      reactions: {}
+    };
+
+    const sendTask = async () => {
+      // Ajouter le message
+      await addDoc(collection(db, 'conversations', convId, 'messages'), messageData);
+
+      // Mettre à jour la conversation
+      await updateDoc(doc(db, 'conversations', convId), {
+        lastMessage: { text: text || '📎 Pièce jointe', senderId: currentUid },
+        lastMessageAt: serverTimestamp(),
+        [`typingStatus.${currentUid}`]: false
+      });
+    };
+
+    if (isOnline) {
+      try { await sendTask(); } 
+      catch (err) {
+        console.error('Erreur envoi message:', err);
+        offlineQueue.push(sendTask);
+        showToast('Message mis en file d\'attente - hors ligne', 'warning');
+      }
+    } else {
+      offlineQueue.push(sendTask);
+      showToast('Message mis en file d\'attente - hors ligne', 'warning');
+    }
   };
 
-  document.getElementById('msg-send-btn')?.addEventListener('click', sendMsg);
-  document.getElementById('msg-input')?.addEventListener('keydown', e => { if (e.key === 'Enter') sendMsg(); });
+  // Gestion du typing indicator
+  const updateTypingStatus = async (isTyping) => {
+    if (!isOnline) return;
+    try {
+      await updateDoc(doc(db, 'conversations', convId), {
+        [`typingStatus.${currentUid}`]: isTyping,
+        [`typingStatus.${currentUid}At`]: serverTimestamp()
+      });
+    } catch (e) { /* ignore */ }
+  };
+
+  // Souscrire au typing status de l'autre utilisateur
+  const typingUnsubscribe = onSnapshot(doc(db, 'conversations', convId), (snap) => {
+    if (!snap.exists()) return;
+    const data = snap.data();
+    const otherTyping = data.typingStatus?.[conv.userId];
+    const typingIndicator = document.getElementById('msg-typing-indicator');
+    if (typingIndicator) {
+      typingIndicator.style.display = otherTyping ? 'flex' : 'none';
+    }
+  });
+
+  // Store unsubscribe for cleanup
+  if (currentMessagesUnsubscribe) {
+    const oldUnsub = currentMessagesUnsubscribe;
+    currentMessagesUnsubscribe = () => {
+      oldUnsub();
+      typingUnsubscribe();
+    };
+  }
+
+  document.getElementById('msg-send-btn')?.addEventListener('click', () => sendMsg());
+  
+  const msgInput = document.getElementById('msg-input');
+  msgInput?.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMsg();
+    } else {
+      // Typing indicator
+      updateTypingStatus(true);
+      clearTimeout(typingTimeout);
+      typingTimeout = setTimeout(() => updateTypingStatus(false), TYPING_TIMEOUT_MS);
+    }
+  });
+
+  // Gestion des pièces jointes
+  document.getElementById('msg-attach-btn')?.addEventListener('click', () => {
+    document.getElementById('msg-file-input')?.click();
+  });
+
+  document.getElementById('msg-file-input')?.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    if (file.size > 10 * 1024 * 1024) {
+      showToast('Fichier trop volumineux (max 10MB)', 'error');
+      return;
+    }
+
+    showToast('Envoi du fichier...', 'info');
+    
+    try {
+      const storageRef = ref(storage, `messages/${convId}/${Date.now()}_${file.name}`);
+      await uploadBytes(storageRef, file);
+      const url = await getDownloadURL(storageRef);
+      
+      const attachment = {
+        name: file.name,
+        type: file.type,
+        size: file.size,
+        url: url,
+        isImage: file.type.startsWith('image/')
+      };
+      
+      await sendMsg(null, attachment);
+      showToast('Fichier envoyé', 'success');
+    } catch (err) {
+      console.error('Erreur envoi fichier:', err);
+      showToast('Impossible d\'envoyer le fichier', 'error');
+    }
+    
+    e.target.value = '';
+  });
+
+  // Gestion des réactions emoji (simple)
+  document.getElementById('msg-emoji-btn')?.addEventListener('click', () => {
+    const emojis = ['👍', '❤️', '😂', '😮', '😢', '😡'];
+    const picker = document.createElement('div');
+    picker.className = 'emoji-picker';
+    picker.innerHTML = emojis.map(e => `<span class="emoji-option">${e}</span>`).join('');
+    picker.style.cssText = 'position:absolute;bottom:60px;right:20px;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:8px;display:flex;gap:4px;box-shadow:0 4px 12px rgba(0,0,0,0.15);z-index:100;';
+    
+    document.querySelector('.msg-input-area')?.appendChild(picker);
+    
+    picker.querySelectorAll('.emoji-option').forEach(emoji => {
+      emoji.style.cssText = 'cursor:pointer;padding:4px 6px;font-size:20px;border-radius:4px;transition:background 0.2s;';
+      emoji.addEventListener('mouseover', () => emoji.style.background = 'var(--surface-hover)');
+      emoji.addEventListener('mouseout', () => emoji.style.background = 'transparent');
+      emoji.addEventListener('click', () => {
+        const input = document.getElementById('msg-input');
+        input.value += emoji.textContent;
+        picker.remove();
+        input.focus();
+      });
+    });
+    
+    setTimeout(() => {
+      document.addEventListener('click', function closePicker(e) {
+        if (!picker.contains(e.target)) {
+          picker.remove();
+          document.removeEventListener('click', closePicker);
+        }
+      });
+    }, 100);
+  });
+}
+
+function renderMessages(messages, otherUser) {
+  const msgsContainer = document.getElementById('msg-messages');
+  if (!msgsContainer) return;
+
+  const wasAtBottom = msgsContainer.scrollHeight - msgsContainer.scrollTop <= msgsContainer.clientHeight + 50;
+
+  const messagesHTML = messages.map(m => {
+    const isMe = m.senderId === currentUid;
+    const time = m.timestamp?.toDate ? formatTime(m.timestamp.toDate()) : '';
+    const sender = isMe ? 'Vous' : otherUser.name;
+    
+    // Attachment rendering
+    let attachmentHTML = '';
+    if (m.attachment) {
+      if (m.attachment.isImage) {
+        attachmentHTML = `<div class="msg-attachment"><img src="${m.attachment.url}" alt="${m.attachment.name}" style="max-width:200px;border-radius:8px;cursor:pointer;" onclick="window.open('${m.attachment.url}')"></div>`;
+      } else {
+        attachmentHTML = `<div class="msg-attachment file"><a href="${m.attachment.url}" target="_blank" style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--surface);border-radius:8px;text-decoration:none;color:var(--text-primary);"><i class="fa-solid fa-file"></i><span>${m.attachment.name}</span></a></div>`;
+      }
+    }
+    
+    // Reactions
+    let reactionsHTML = '';
+    if (m.reactions && Object.keys(m.reactions).length > 0) {
+      const reactionCounts = {};
+      Object.values(m.reactions).forEach(r => { reactionCounts[r] = (reactionCounts[r] || 0) + 1; });
+      reactionsHTML = `<div class="msg-reactions">${Object.entries(reactionCounts).map(([emoji, count]) => `<span class="reaction ${m.reactions[currentUid] === emoji ? 'mine' : ''}">${emoji} ${count}</span>`).join('')}</div>`;
+    }
+    
+    return `
+      <div class="msg-bubble-row ${isMe ? 'me' : 'other'}" data-msg-id="${m.id}">
+        ${!isMe ? `<div class="msg-bubble-avatar" style="background:${otherUser.color}20;color:${otherUser.color};" title="${sender}">${otherUser.initials}</div>` : ''}
+        <div class="msg-bubble-wrapper">
+          <div class="msg-bubble ${isMe ? 'bubble-me' : 'bubble-other'}" onclick="toggleReactionMenu('${m.id}')">
+            ${attachmentHTML}
+            ${m.text ? `<p>${escapeHtml(m.text)}</p>` : ''}
+            <span class="msg-bubble-time">${time}</span>
+          </div>
+          ${reactionsHTML}
+        </div>
+      </div>`;
+  }).join('');
+
+  msgsContainer.innerHTML = messagesHTML || '<div class="msg-empty-chat"><p>Aucun message</p><span>Envoyez le premier message !</span></div>';
+  
+  if (wasAtBottom) {
+    msgsContainer.scrollTop = msgsContainer.scrollHeight;
+  }
+}
+
+// Toggle reaction menu
+function toggleReactionMenu(msgId) {
+  const existing = document.querySelector('.reaction-menu');
+  if (existing) { existing.remove(); return; }
+  
+  const emojis = ['👍', '❤️', '😂', '😮', '😢', '👏'];
+  const menu = document.createElement('div');
+  menu.className = 'reaction-menu';
+  menu.innerHTML = emojis.map(e => `<span class="reaction-option" data-emoji="${e}">${e}</span>`).join('');
+  menu.style.cssText = 'position:fixed;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:6px;display:flex;gap:4px;box-shadow:0 4px 12px rgba(0,0,0,0.15);z-index:1000;';
+  
+  document.body.appendChild(menu);
+  
+  const bubble = document.querySelector(`[data-msg-id="${msgId}"] .msg-bubble`);
+  if (bubble) {
+    const rect = bubble.getBoundingClientRect();
+    menu.style.left = `${rect.left + rect.width/2 - menu.offsetWidth/2}px`;
+    menu.style.top = `${rect.top - 45}px`;
+  }
+  
+  menu.querySelectorAll('.reaction-option').forEach(opt => {
+    opt.style.cssText = 'cursor:pointer;padding:4px 6px;font-size:18px;border-radius:4px;transition:transform 0.2s;';
+    opt.addEventListener('mouseover', () => opt.style.transform = 'scale(1.3)');
+    opt.addEventListener('mouseout', () => opt.style.transform = 'scale(1)');
+    opt.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      await addReaction(msgId, opt.dataset.emoji);
+      menu.remove();
+    });
+  });
+  
+  setTimeout(() => {
+    document.addEventListener('click', function closeMenu(e) {
+      if (!menu.contains(e.target)) {
+        menu.remove();
+        document.removeEventListener('click', closeMenu);
+      }
+    });
+  }, 100);
+}
+
+// Add reaction to message
+async function addReaction(msgId, emoji) {
+  if (!activeConvId) return;
+  try {
+    const msgRef = doc(db, 'conversations', activeConvId, 'messages', msgId);
+    await updateDoc(msgRef, {
+      [`reactions.${currentUid}`]: emoji
+    });
+  } catch (err) {
+    console.error('Erreur ajout réaction:', err);
+  }
+}
+
+async function markMessagesAsRead(convId) {
+  if (!convId || !currentUid) return;
+
+  try {
+    // Simple query sans composite index - on filtre côté client
+    const messagesQuery = query(
+      collection(db, 'conversations', convId, 'messages'),
+      where('read', '==', false)
+    );
+
+    const messagesSnap = await getDocs(messagesQuery);
+    
+    // Filtrer les messages des autres utilisateurs côté client
+    const updatePromises = messagesSnap.docs
+      .filter(docSnap => docSnap.data().senderId !== currentUid)
+      .map(docSnap =>
+        updateDoc(doc(db, 'conversations', convId, 'messages', docSnap.id), { read: true })
+      );
+
+    await Promise.all(updatePromises);
+  } catch (err) {
+    console.error('Erreur marquage messages lus:', err);
+  }
 }
 
 function attachConvClicks() {
   document.querySelectorAll('.msg-conv-item').forEach(el => {
-    el.addEventListener('click', () => openConversation(el.dataset.convId));
+    el.addEventListener('click', (e) => {
+      // Don't open if clicking menu button
+      if (e.target.closest('.msg-conv-menu-btn')) return;
+      openConversation(el.dataset.convId);
+    });
+  });
+  
+  // Menu button clicks
+  document.querySelectorAll('.msg-conv-menu-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const rect = btn.getBoundingClientRect();
+      showConvMenu(btn.dataset.convId, rect.left, rect.bottom);
+    });
   });
 }
 
 function initMessagerie() {
   attachConvClicks();
+  
+  // Request notification permission
+  if ('Notification' in window && Notification.permission === 'default') {
+    Notification.requestPermission();
+  }
 
   // Recherche dans les conversations
   document.getElementById('msg-search-input')?.addEventListener('input', e => {
@@ -3997,15 +4669,17 @@ function initMessagerie() {
     attachConvClicks();
   });
 
-  // Clic sur membre équipe → ouvrir sa conversation
+  // Clic sur membre équipe → démarrer ou ouvrir conversation
   document.querySelectorAll('.msg-team-item').forEach(el => {
     el.addEventListener('click', () => {
       const userId = el.dataset.userId;
       const conv = messagerieState.conversations.find(c => c.userId === userId);
       if (conv) {
-        document.getElementById('msg-convs-list').innerHTML = renderConvList(messagerieState.conversations);
-        attachConvClicks();
+        // Conversation existante → l'ouvrir
         openConversation(conv.id);
+      } else {
+        // Pas de conversation → en créer une nouvelle
+        startConversation(userId);
       }
     });
   });
@@ -4542,3 +5216,11 @@ function escapeHtml(str) {
   if (typeof str !== 'string') return '';
   return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
 }
+
+// Expose functions globally for inline onclick handlers
+window.deleteConversation = deleteConversation;
+window.markConversationAsRead = markConversationAsRead;
+window.toggleReactionMenu = toggleReactionMenu;
+window.addReaction = addReaction;
+window.openConversation = openConversation;
+window.startConversation = startConversation;
